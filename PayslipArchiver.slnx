@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PayslipArchiver.Application/PayslipArchiver.Application.csproj" />
+    <Project Path="src/PayslipArchiver.Domain/PayslipArchiver.Domain.csproj" />
+    <Project Path="src/PayslipArchiver.Infrastructure/PayslipArchiver.Infrastructure.csproj" />
+    <Project Path="src/PayslipArchiver.Worker/PayslipArchiver.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PayslipArchiver.Application.Tests/PayslipArchiver.Application.Tests.csproj" />
+    <Project Path="tests/PayslipArchiver.Domain.Tests/PayslipArchiver.Domain.Tests.csproj" />
+    <Project Path="tests/PayslipArchiver.Infrastructure.Tests/PayslipArchiver.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

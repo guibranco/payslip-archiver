@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>PayslipArchiver.Worker</RootNamespace>
+    <AssemblyName>payslip-archiver</AssemblyName>
+    <Description>Host: runs the archive pipeline on a schedule (or once), with systemd integration.</Description>
+    <UserSecretsId>payslip-archiver</UserSecretsId>
+    <!-- Single-file, self-contained publish for the systemd deployment; `dotnet publish -r linux-x64`. -->
+    <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
+    <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PayslipArchiver.Application\PayslipArchiver.Application.csproj" />
+    <ProjectReference Include="..\PayslipArchiver.Infrastructure\PayslipArchiver.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" />
+  </ItemGroup>
+
+</Project>

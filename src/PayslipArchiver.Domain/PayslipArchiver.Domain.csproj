@@ -1,0 +1,8 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PayslipArchiver.Domain</RootNamespace>
+    <Description>Pure domain model: mail messages, attachments, pay periods and archive naming rules. No dependencies.</Description>
+  </PropertyGroup>
+
+</Project>
