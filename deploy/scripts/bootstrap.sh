@@ -71,12 +71,21 @@ visudo -cf "${SUDOERS_TMP}" >/dev/null
 install -m 440 -o root -g root "${SUDOERS_TMP}" "${SUDOERS_DST}"
 rm -f "${SUDOERS_TMP}"
 
+echo
+echo "✅ Host prepared."
+echo
+echo "This host's SSH key fingerprints — compare them with the output of 'ssh-keyscan -p PORT HOST' run from a"
+echo "trusted machine before storing that output as the SSH_KNOWN_HOSTS secret:"
+for key in /etc/ssh/ssh_host_*_key.pub; do
+  if [[ -f "${key}" ]]; then
+    ssh-keygen -lf "${key}" 2>/dev/null | sed 's/^/    /' || true
+  fi
+done
 cat <<EOF
-
-✅ Host prepared.
 
 Next steps:
   1. Put the public half of the SSH_PRIVATE_KEY repository secret in ${DEPLOY_HOME}/.ssh/authorized_keys
-  2. Set SSH_HOST=$(hostname -f 2>/dev/null || hostname), SSH_USER=${DEPLOY_USER} and the application secrets in the repository
+  2. Set SSH_HOST=$(hostname -f 2>/dev/null || hostname), SSH_USER=${DEPLOY_USER}, SSH_KNOWN_HOSTS (see above)
+     and the application secrets in the repository
   3. Merge to main — the Deploy workflow uploads the release and runs: sudo ${INSTALLER_DST} <release-dir> <env-file>
 EOF

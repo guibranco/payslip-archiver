@@ -140,6 +140,8 @@ runs as the unprivileged `payslip` user.
 git clone https://github.com/guibranco/payslip-archiver && cd payslip-archiver
 sudo deploy/scripts/bootstrap.sh deploy      # creates users, dirs, /usr/local/sbin/payslip-archiver-install, unit, sudoers
 echo "<public key of SSH_PRIVATE_KEY>" | sudo tee -a /home/deploy/.ssh/authorized_keys
+# from your own machine, for the SSH_KNOWN_HOSTS secret (compare with the fingerprints bootstrap.sh printed):
+ssh-keyscan -p 22 <host>
 ```
 
 Re-run `bootstrap.sh` whenever `install.sh` or the unit change in the repository — a deploy prints a
@@ -151,6 +153,7 @@ installed on the host, and never installs them itself.
 | Secret | Required | Becomes |
 |---|---|---|
 | `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` | yes | how the workflow reaches the host (`SSH_PORT` optional, default 22) |
+| `SSH_KNOWN_HOSTS` | yes | the host's public key(s) in `known_hosts` format — the output of `ssh-keyscan -p PORT HOST` from a trusted machine, checked against the fingerprints `bootstrap.sh` prints. Pinned so a spoofed host can never receive the rendered secrets. |
 | `MAILBOX_HOST`, `MAILBOX_USERNAME`, `MAILBOX_PASSWORD` | yes | `Mailbox:*` (`MAILBOX_PORT`, `MAILBOX_PROTOCOL` optional: 993 / `Imap`) |
 | `FILTER_FROM_CONTAINS`, `FILTER_SUBJECT_CONTAINS` | no | `Filter:*` |
 | `PDF_PASSWORD` | yes | `Pdf:Password` |

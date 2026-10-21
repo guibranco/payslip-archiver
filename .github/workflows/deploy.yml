@@ -11,6 +11,10 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+# Least privilege: the token is read-only everywhere except the release job, which needs contents: write.
+permissions:
+  contents: read
+
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -25,6 +29,12 @@ env:
 #   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, SSH_PORT (optional)   — the deploy user created by
 #                                                                 deploy/scripts/bootstrap.sh (one-time,
 #                                                                 as root; see README → Deploying)
+#   SSH_KNOWN_HOSTS                                           — the host's public key(s) in known_hosts
+#                                                                 format (`ssh-keyscan -p PORT HOST`,
+#                                                                 verified against the fingerprints
+#                                                                 bootstrap.sh prints); pinned so a
+#                                                                 spoofed host can never receive the
+#                                                                 rendered secrets
 #   MAILBOX_HOST, MAILBOX_USERNAME, MAILBOX_PASSWORD          — the payroll mailbox
 #   MAILBOX_PORT, MAILBOX_PROTOCOL (optional)                 — default 993 / Imap
 #   FILTER_FROM_CONTAINS, FILTER_SUBJECT_CONTAINS (optional)  — what counts as a payslip e-mail
@@ -47,6 +57,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 🔧 Install GitVersion
         uses: gittools/actions/gitversion/setup@7417b1089e2c7de93510f1901d656ddf60bb024f # v4.7.0
@@ -157,65 +168,83 @@ jobs:
             fi
           done
           umask 077
-          # systemd EnvironmentFile: KEY=value, no shell quoting, so values are written verbatim.
-          cat > payslip-archiver.env <<EOF
-          # Rendered by the Deploy workflow for v${VERSION}; edit the repository secrets, not this file.
-          Mailbox__Protocol=${MAILBOX_PROTOCOL:-Imap}
-          Mailbox__Host=${MAILBOX_HOST}
-          Mailbox__Port=${MAILBOX_PORT:-993}
-          Mailbox__UseSsl=true
-          Mailbox__Username=${MAILBOX_USERNAME}
-          Mailbox__Password=${MAILBOX_PASSWORD}
-          Mailbox__Folder=INBOX
-          Mailbox__ProcessedFolder=Processed
-          Filter__FromContains=${FILTER_FROM_CONTAINS}
-          Filter__SubjectContains=${FILTER_SUBJECT_CONTAINS}
-          Filter__AttachmentPattern=*.pdf
-          Pdf__Password=${PDF_PASSWORD}
-          Archive__Provider=Dropbox
-          Dropbox__AppKey=${DROPBOX_APP_KEY}
-          Dropbox__RefreshToken=${DROPBOX_REFRESH_TOKEN}
-          Dropbox__RootPath=${DROPBOX_ROOT_PATH:-/}
-          Schedule__Interval=00:30:00
-          Heartbeat__PingUrl=${HEARTBEAT_PING_URL}
-          EOF
+          # systemd EnvironmentFile syntax: inside double quotes only backslash and the quote itself are
+          # special, so escaping those two keeps every secret byte-for-byte (including $, spaces, # …).
+          q() { local v=${1//\\/\\\\}; v=${v//\"/\\\"}; printf '"%s"' "${v}"; }
+          {
+            echo "# Rendered by the Deploy workflow for v${VERSION}; edit the repository secrets, not this file."
+            echo "Mailbox__Protocol=$(q "${MAILBOX_PROTOCOL:-Imap}")"
+            echo "Mailbox__Host=$(q "${MAILBOX_HOST}")"
+            echo "Mailbox__Port=$(q "${MAILBOX_PORT:-993}")"
+            echo "Mailbox__UseSsl=true"
+            echo "Mailbox__Username=$(q "${MAILBOX_USERNAME}")"
+            echo "Mailbox__Password=$(q "${MAILBOX_PASSWORD}")"
+            echo "Mailbox__Folder=INBOX"
+            echo "Mailbox__ProcessedFolder=Processed"
+            echo "Filter__FromContains=$(q "${FILTER_FROM_CONTAINS}")"
+            echo "Filter__SubjectContains=$(q "${FILTER_SUBJECT_CONTAINS}")"
+            echo "Filter__AttachmentPattern=*.pdf"
+            echo "Pdf__Password=$(q "${PDF_PASSWORD}")"
+            echo "Archive__Provider=Dropbox"
+            echo "Dropbox__AppKey=$(q "${DROPBOX_APP_KEY}")"
+            echo "Dropbox__RefreshToken=$(q "${DROPBOX_REFRESH_TOKEN}")"
+            echo "Dropbox__RootPath=$(q "${DROPBOX_ROOT_PATH:-/}")"
+            echo "Schedule__Interval=00:30:00"
+            echo "Heartbeat__PingUrl=$(q "${HEARTBEAT_PING_URL}")"
+          } > payslip-archiver.env
           echo "Rendered $(grep -c '=' payslip-archiver.env) settings"
 
-      - name: 🔑 Write SSH private key
+      - name: 🔑 Write SSH key and pinned host key
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
         run: |
+          for required in SSH_HOST SSH_USER SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
+            if [[ -z "${!required}" ]]; then
+              echo "::error::Repository secret ${required} is not set (SSH_KNOWN_HOSTS: run 'ssh-keyscan -p ${SSH_PORT} ${SSH_HOST:-HOST}' from a trusted machine and check the fingerprints bootstrap.sh printed)"
+              exit 1
+            fi
+          done
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "${SSH_PORT}" "${SSH_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+          # The host key is pinned from a secret, never learned from the network on the runner: a spoofed
+          # SSH_HOST must not be able to receive the rendered secrets.
+          printf '%s\n' "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host deploy-target
+            HostName ${SSH_HOST}
+            Port ${SSH_PORT}
+            User ${SSH_USER}
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
+          chmod 600 ~/.ssh/config
 
       - name: 📦 Upload release and secrets
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+          ssh deploy-target \
             "rm -rf ~/payslip-archiver-deploy && mkdir -p ~/payslip-archiver-deploy && chmod 700 ~/payslip-archiver-deploy"
-          scp -i ~/.ssh/deploy_key -P "${SSH_PORT}" \
+          scp \
             "dist/payslip-archiver-${VERSION}-linux-x64.tar.gz" \
             "dist/payslip-archiver-${VERSION}-linux-x64.tar.gz.sha256" \
             payslip-archiver.env \
-            "${SSH_USER}@${SSH_HOST}:~/payslip-archiver-deploy/"
+            "deploy-target:~/payslip-archiver-deploy/"
 
       - name: 🚀 Install and restart the service
         env:
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+          ssh deploy-target \
             VERSION="${VERSION}" bash -s <<'ENDSSH'
             set -euo pipefail
             cd ~/payslip-archiver-deploy
@@ -240,7 +269,7 @@ jobs:
 
       - name: 🧹 Remove private key and secrets
         if: always()
-        run: rm -f ~/.ssh/deploy_key payslip-archiver.env
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/config ~/.ssh/known_hosts payslip-archiver.env
 
   # ── 3. Tag & GitHub release ──────────────────────────────────────────────────
   release:
