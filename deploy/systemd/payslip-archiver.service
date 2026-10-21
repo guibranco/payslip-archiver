@@ -1,11 +1,12 @@
 # /etc/systemd/system/payslip-archiver.service
 #
-# Installed by deploy/scripts/install.sh (which the Deploy workflow runs on the host). Manual install:
+# Installed by deploy/scripts/bootstrap.sh (one-time, as root); releases are then rolled out by the
+# root-owned /usr/local/sbin/payslip-archiver-install, which the Deploy workflow runs. Manual install:
 #
-#   dotnet publish src/PayslipArchiver.Worker -c Release -r linux-x64 -o publish/linux-x64
-#   cp deploy/systemd/payslip-archiver.service publish/linux-x64/
-#   cp deploy/systemd/payslip-archiver.env /tmp/payslip-archiver.env   # then fill in the secrets
-#   sudo deploy/scripts/install.sh publish/linux-x64 /tmp/payslip-archiver.env
+#   sudo deploy/scripts/bootstrap.sh                                      # once per host
+#   dotnet publish src/PayslipArchiver.Worker -c Release -r linux-x64 -o /tmp/payslip-release
+#   cp deploy/systemd/payslip-archiver.env /tmp/payslip-archiver.env     # then fill in the secrets
+#   sudo /usr/local/sbin/payslip-archiver-install /tmp/payslip-release /tmp/payslip-archiver.env
 #   journalctl -u payslip-archiver -f
 #
 # Type=notify works because the host calls AddSystemd(). /opt/payslip-archiver/bin is a symlink to the

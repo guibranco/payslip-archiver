@@ -78,7 +78,17 @@ public sealed partial class ArchivePayslips
             }
 
             var entry = await _ledger.FindAsync(key, cancellationToken).ConfigureAwait(false);
-            if (entry is { Status: ProcessingStatus.Archived or ProcessingStatus.Ignored })
+            if (entry is { Status: ProcessingStatus.Archived })
+            {
+                // Archived in the ledger yet still listed by the mailbox: a previous cycle was interrupted
+                // (a restart during a deploy, say) between recording the outcome and marking the e-mail
+                // handled. Finish that last step now; the documents themselves are never re-uploaded.
+                await FinishHandlingAsync(session, key, cancellationToken).ConfigureAwait(false);
+                skipped++;
+                continue;
+            }
+
+            if (entry is { Status: ProcessingStatus.Ignored })
             {
                 skipped++;
                 continue;
@@ -122,6 +132,25 @@ public sealed partial class ArchivePayslips
         var report = new CycleReport(keys.Count, archived, documents, ignored, skipped, failed);
         LogCycleFinished(report);
         return report;
+    }
+
+    private async Task FinishHandlingAsync(IMailboxSession session, string key, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await session.MarkHandledAsync(key, cancellationToken).ConfigureAwait(false);
+            LogHandlingFinished(key);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+#pragma warning disable CA1031 // The archive is already safe; a mailbox hiccup here just means another attempt next cycle.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            LogHandlingFinishFailed(ex, key);
+        }
     }
 
     private async Task<(int Documents, string Outcome)> ProcessAsync(IMailboxSession session, string key, CancellationToken cancellationToken)
@@ -191,4 +220,10 @@ public sealed partial class ArchivePayslips
 
     [LoggerMessage(EventId = 1007, Level = LogLevel.Information, Message = "Reached the cap of {Cap} message(s) for this cycle out of {Listed} listed; the rest will be picked up next cycle")]
     private partial void LogCapReached(int cap, int listed);
+
+    [LoggerMessage(EventId = 1008, Level = LogLevel.Information, Message = "Marked {Key} handled; it was archived earlier but the mailbox still listed it")]
+    private partial void LogHandlingFinished(string key);
+
+    [LoggerMessage(EventId = 1009, Level = LogLevel.Warning, Message = "Could not mark the already-archived {Key} handled; will try again next cycle")]
+    private partial void LogHandlingFinishFailed(Exception exception, string key);
 }

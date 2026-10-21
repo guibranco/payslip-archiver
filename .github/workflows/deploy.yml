@@ -22,9 +22,9 @@ env:
 # re-run and lands on the same version.
 #
 # Repository secrets:
-#   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, SSH_PORT (optional)   — the deploy user on vinhedo3; needs
-#                                                                 passwordless sudo for install.sh
-#                                                                 (sudoers line in README → Deploying)
+#   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, SSH_PORT (optional)   — the deploy user created by
+#                                                                 deploy/scripts/bootstrap.sh (one-time,
+#                                                                 as root; see README → Deploying)
 #   MAILBOX_HOST, MAILBOX_USERNAME, MAILBOX_PASSWORD          — the payroll mailbox
 #   MAILBOX_PORT, MAILBOX_PROTOCOL (optional)                 — default 993 / Imap
 #   FILTER_FROM_CONTAINS, FILTER_SUBJECT_CONTAINS (optional)  — what counts as a payslip e-mail
@@ -100,8 +100,11 @@ jobs:
           VERSION: ${{ steps.gitversion.outputs.majorMinorPatch }}
         run: |
           rm -f publish/linux-x64/*.pdb publish/linux-x64/appsettings.Development.json
+          # The licence travels with every distributed build (AGPL §4/§5); the unit, installer and
+          # bootstrap ship for bootstrap.sh — install.sh never installs them from the upload.
+          cp LICENSE README.md publish/linux-x64/
           cp deploy/systemd/payslip-archiver.service publish/linux-x64/
-          cp deploy/scripts/install.sh publish/linux-x64/
+          cp deploy/scripts/install.sh deploy/scripts/bootstrap.sh publish/linux-x64/
           echo "${VERSION}" > publish/linux-x64/VERSION
           mkdir -p dist
           tar -C publish/linux-x64 -czf "dist/payslip-archiver-${VERSION}-linux-x64.tar.gz" .
@@ -221,10 +224,16 @@ jobs:
             echo "📂 Extracting release"
             rm -rf release && mkdir release
             tar -C release -xzf "payslip-archiver-${VERSION}-linux-x64.tar.gz"
-            chmod +x release/install.sh release/payslip-archiver
+            chmod +x release/payslip-archiver
             echo "⚙️  Installing v${VERSION}"
-            # Absolute path on purpose: it is what the sudoers rule for the deploy user pins.
-            sudo "${HOME}/payslip-archiver-deploy/release/install.sh" "${HOME}/payslip-archiver-deploy/release" "${HOME}/payslip-archiver-deploy/payslip-archiver.env"
+            # Only the root-owned installer that bootstrap.sh put in place may run with sudo; the release
+            # and env file are passed to it as data. Its WARNING lines (unit/installer drift) are
+            # surfaced as workflow warnings below.
+            sudo /usr/local/sbin/payslip-archiver-install \
+              "${HOME}/payslip-archiver-deploy/release" \
+              "${HOME}/payslip-archiver-deploy/payslip-archiver.env" 2>&1 | tee install.log
+            test "${PIPESTATUS[0]}" -eq 0
+            grep '^WARNING:' install.log | sed 's/^WARNING: /::warning title=payslip-archiver-install::/' || true
             echo "🧹 Cleaning up"
             cd ~ && rm -rf ~/payslip-archiver-deploy
           ENDSSH

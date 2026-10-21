@@ -38,6 +38,8 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /app .
+# The licence travels with every distributed image (AGPL §4/§5).
+COPY LICENSE /app/LICENSE
 
 # The SQLite ledger lives here; mount it so it survives container recreation
 # (the image runs as the unprivileged `app` user, so a bind mount must be writable by UID 1654).

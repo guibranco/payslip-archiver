@@ -131,16 +131,20 @@ release by [`deploy.yml`](.github/workflows/deploy.yml). Pull requests run [`bui
 
 ### One-time host setup
 
+Everything that has to be trusted on the host — the installer the deploy user may run with `sudo`,
+the systemd unit, the sudoers rule — is put in place once, as root, by `bootstrap.sh`; deploys only
+ever hand *data* (the release and the env file) to that root-owned installer, and the binary itself
+runs as the unprivileged `payslip` user.
+
 ```bash
-# a dedicated deploy user whose only job is to run install.sh
-sudo useradd --create-home --shell /bin/bash deploy
-sudo install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
-echo "<public key of SSH_PRIVATE_KEY>" | sudo tee /home/deploy/.ssh/authorized_keys
-sudo chmod 600 /home/deploy/.ssh/authorized_keys && sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
-# passwordless sudo for the install script only (the path is what the workflow invokes)
-echo 'deploy ALL=(root) NOPASSWD: /home/deploy/payslip-archiver-deploy/release/install.sh' | sudo tee /etc/sudoers.d/payslip-archiver
-sudo chmod 440 /etc/sudoers.d/payslip-archiver
+git clone https://github.com/guibranco/payslip-archiver && cd payslip-archiver
+sudo deploy/scripts/bootstrap.sh deploy      # creates users, dirs, /usr/local/sbin/payslip-archiver-install, unit, sudoers
+echo "<public key of SSH_PRIVATE_KEY>" | sudo tee -a /home/deploy/.ssh/authorized_keys
 ```
+
+Re-run `bootstrap.sh` whenever `install.sh` or the unit change in the repository — a deploy prints a
+warning (visible on the workflow run) when the copies shipped in a release differ from the ones
+installed on the host, and never installs them itself.
 
 ### Repository secrets
 
@@ -153,12 +157,15 @@ sudo chmod 440 /etc/sudoers.d/payslip-archiver
 | `DROPBOX_APP_KEY`, `DROPBOX_REFRESH_TOKEN` | yes | `Dropbox:*` (`DROPBOX_ROOT_PATH` optional, default `/`) |
 | `HEARTBEAT_PING_URL` | no | `Heartbeat:PingUrl` |
 
-The workflow renders them into `/etc/payslip-archiver/env` (root-only, read by systemd before the
-service drops to the `payslip` user), uploads the self-contained build and runs
-[`deploy/scripts/install.sh`](deploy/scripts/install.sh), which creates the service user and
-directories, stages the release under `/opt/payslip-archiver/releases/<stamp>`, swaps the
-`/opt/payslip-archiver/bin` symlink, (re)starts the unit and keeps the last three releases for rollback.
-The ledger lives in `/var/lib/payslip-archiver` and survives upgrades.
+The workflow renders them into an env file, uploads it with the self-contained build and runs
+`sudo /usr/local/sbin/payslip-archiver-install <release> <env>` ([`deploy/scripts/install.sh`](deploy/scripts/install.sh)),
+which refuses symlinks in the upload, stages the release under `/opt/payslip-archiver/releases/<stamp>`,
+installs the env as `/etc/payslip-archiver/env` (root-only, read by systemd before the service drops
+privileges), swaps the `/opt/payslip-archiver/bin` symlink, restarts the unit and waits for it to be
+active. If the new release does not come up, the previous release and env are put back and the deploy
+fails. The last three releases are kept; the ledger lives in `/var/lib/payslip-archiver` and survives
+upgrades. Every release tarball also carries `LICENSE`, `bootstrap.sh`, `install.sh` and the unit, so a
+host can be prepared from the tarball alone.
 
 **Manual install** follows the same path — see the comment block at the top of
 [`deploy/systemd/payslip-archiver.service`](deploy/systemd/payslip-archiver.service). On an LXC target
@@ -187,7 +194,7 @@ tests/
   PayslipArchiver.Domain.Tests
   PayslipArchiver.Application.Tests   pipeline behaviour with NSubstitute fakes
   PayslipArchiver.Infrastructure.Tests  real encrypted PDF fixtures (RC4, AES-128, AES-256), SQLite, MIME mapping
-deploy/                            systemd unit + env template, install.sh, docker-compose
+deploy/                            systemd unit + env template, bootstrap.sh + install.sh, docker-compose
 scripts/make-fixtures.sh           regenerates the encrypted test PDFs with qpdf
 .github/workflows/                 build.yml (PRs: build, test, coverage) · deploy.yml (main: release + deploy to the host)
 ```
