@@ -1,0 +1,70 @@
+# Dependabot keeps NuGet packages, GitHub Actions and the Docker base images current.
+# Central Package Management means NuGet bumps land in Directory.Packages.props.
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Dublin
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - nuget
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # The Microsoft.Extensions.* / Microsoft.Data.* packages move in lockstep; one PR per servicing release.
+      microsoft:
+        patterns:
+          - "Microsoft.Extensions.*"
+          - "Microsoft.Data.*"
+          - "System.*"
+      # MailKit and MimeKit are released together.
+      mail:
+        patterns:
+          - "MailKit"
+          - "MimeKit"
+      tests:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+          - "NSubstitute"
+          - "coverlet.*"
+    ignore:
+      # PDFsharp changes licence terms between release lines; majors and minors are reviewed by hand.
+      - dependency-name: "PDFsharp"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Dublin
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Dublin
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(docker)"

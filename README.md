@@ -1,7 +1,8 @@
 # 📬 🔓 payslip-archiver
 
-[![CI](https://github.com/guibranco/payslip-archiver/actions/workflows/ci.yml/badge.svg)](https://github.com/guibranco/payslip-archiver/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Build](https://github.com/guibranco/payslip-archiver/actions/workflows/build.yml/badge.svg)](https://github.com/guibranco/payslip-archiver/actions/workflows/build.yml)
+[![Deploy](https://github.com/guibranco/payslip-archiver/actions/workflows/deploy.yml/badge.svg)](https://github.com/guibranco/payslip-archiver/actions/workflows/deploy.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 
 Watches a payroll mailbox, strips the password from payslip PDFs and archives clean copies to Dropbox.
@@ -123,18 +124,58 @@ the e-mail date. Recognised shapes include `2026-10`, `202610`, `2026-10-15`, `1
 
 ## Deploying
 
-**systemd (recommended for a VM).** Publish a self-contained single file and install the unit:
+Every push to `main` is built, tested, shipped to the host as a systemd service and tagged as a GitHub
+release by [`deploy.yml`](.github/workflows/deploy.yml). Pull requests run [`build.yml`](.github/workflows/build.yml)
+(build, tests, coverage summary on the PR). Versions come from GitVersion: put `+semver: minor` or
+`+semver: major` in the merge commit to bump more than a patch.
+
+### One-time host setup
+
+Everything that has to be trusted on the host — the installer the deploy user may run with `sudo`,
+the systemd unit, the sudoers rule — is put in place once, as root, by `bootstrap.sh`; deploys only
+ever hand *data* (the release and the env file) to that root-owned installer, and the binary itself
+runs as the unprivileged `payslip` user.
 
 ```bash
-dotnet publish src/PayslipArchiver.Worker -c Release -r linux-x64 -o publish/linux-x64
+git clone https://github.com/guibranco/payslip-archiver && cd payslip-archiver
+sudo deploy/scripts/bootstrap.sh deploy      # creates users, dirs, /usr/local/sbin/payslip-archiver-install, unit, sudoers
+echo "<public key of SSH_PRIVATE_KEY>" | sudo tee -a /home/deploy/.ssh/authorized_keys
+# from your own machine, for the SSH_KNOWN_HOSTS secret (compare with the fingerprints bootstrap.sh printed):
+ssh-keyscan -p 22 <host>
 ```
 
-Then follow the comments at the top of [`deploy/systemd/payslip-archiver.service`](deploy/systemd/payslip-archiver.service)
-(secrets go in `/etc/payslip-archiver/env`, template in [`deploy/systemd/payslip-archiver.env`](deploy/systemd/payslip-archiver.env)).
-The host integrates with systemd (`Type=notify`) and logs to the journal. CI uploads the same publish
-output as an artifact on every push to `main`.
+Re-run `bootstrap.sh` whenever `install.sh` or the unit change in the repository — a deploy prints a
+warning (visible on the workflow run) when the copies shipped in a release differ from the ones
+installed on the host, and never installs them itself.
 
-**Docker.** `deploy/docker-compose.yml` builds the image and keeps the ledger in a named volume:
+### Repository secrets
+
+| Secret | Required | Becomes |
+|---|---|---|
+| `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` | yes | how the workflow reaches the host (`SSH_PORT` optional, default 22) |
+| `SSH_KNOWN_HOSTS` | yes | the host's public key(s) in `known_hosts` format — the output of `ssh-keyscan -p PORT HOST` from a trusted machine, checked against the fingerprints `bootstrap.sh` prints. Pinned so a spoofed host can never receive the rendered secrets. |
+| `MAILBOX_HOST`, `MAILBOX_USERNAME`, `MAILBOX_PASSWORD` | yes | `Mailbox:*` (`MAILBOX_PORT`, `MAILBOX_PROTOCOL` optional: 993 / `Imap`) |
+| `FILTER_FROM_CONTAINS`, `FILTER_SUBJECT_CONTAINS` | no | `Filter:*` |
+| `PDF_PASSWORD` | yes | `Pdf:Password` |
+| `DROPBOX_APP_KEY`, `DROPBOX_REFRESH_TOKEN` | yes | `Dropbox:*` (`DROPBOX_ROOT_PATH` optional, default `/`) |
+| `HEARTBEAT_PING_URL` | no | `Heartbeat:PingUrl` |
+
+The workflow renders them into an env file, uploads it with the self-contained build and runs
+`sudo /usr/local/sbin/payslip-archiver-install <release> <env>` ([`deploy/scripts/install.sh`](deploy/scripts/install.sh)),
+which refuses symlinks in the upload, stages the release under `/opt/payslip-archiver/releases/<stamp>`,
+installs the env as `/etc/payslip-archiver/env` (root-only, read by systemd before the service drops
+privileges), swaps the `/opt/payslip-archiver/bin` symlink, restarts the unit and waits for it to be
+active. If the new release does not come up, the previous release and env are put back and the deploy
+fails. The last three releases are kept; the ledger lives in `/var/lib/payslip-archiver` and survives
+upgrades. Every release tarball also carries `LICENSE`, `bootstrap.sh`, `install.sh` and the unit, so a
+host can be prepared from the tarball alone.
+
+**Manual install** follows the same path — see the comment block at the top of
+[`deploy/systemd/payslip-archiver.service`](deploy/systemd/payslip-archiver.service). On an LXC target
+drop `ProtectSystem=strict` and `PrivateTmp=true` from the unit first.
+
+**Docker.** `deploy/docker-compose.yml` builds the image and keeps the ledger in a named volume, for
+hosts where a container is preferable to a unit:
 
 ```bash
 cp deploy/systemd/payslip-archiver.env deploy/.env   # fill in the secrets
@@ -156,19 +197,22 @@ tests/
   PayslipArchiver.Domain.Tests
   PayslipArchiver.Application.Tests   pipeline behaviour with NSubstitute fakes
   PayslipArchiver.Infrastructure.Tests  real encrypted PDF fixtures (RC4, AES-128, AES-256), SQLite, MIME mapping
-deploy/                            systemd unit + env template, docker-compose
+deploy/                            systemd unit + env template, bootstrap.sh + install.sh, docker-compose
 scripts/make-fixtures.sh           regenerates the encrypted test PDFs with qpdf
+.github/workflows/                 build.yml (PRs: build, test, coverage) · deploy.yml (main: release + deploy to the host)
 ```
 
-### Why PDFsharp 6.2.x
+### PDFsharp and the licence
 
 Payroll providers hand out only the *user* password. PDFsharp refuses to open such a document for
 modification, so the decryptor opens it in *Import* mode and copies the pages into a brand-new,
 unencrypted document instead — content and resources come along, the security handler does not.
 
-PDFsharp is pinned to **6.2.4**, the last MIT-licensed release: 6.5.0 moved to AGPL-3.0 / commercial and
-requires a licence call at start-up. 6.2.4 already reads AES-256 (R6) files, which covers everything seen
-in the wild. Set `Pdf:Engine=Qpdf` if a provider ever ships something PDFsharp cannot open.
+PDFsharp 6.5+ is dual-licensed (AGPL-3.0 or commercial) and refuses to run until a licence is declared;
+this project declares the AGPL one (`PdfSharpLicense.SetAgplLicense()`), which is why the project itself
+is distributed under the **AGPL-3.0** as well. If you fork it for something you cannot release under the
+AGPL, either buy a PDFsharp licence or switch the engine: `Pdf:Engine=Qpdf` shells out to
+[qpdf](https://qpdf.sourceforge.io/) (Apache-2.0) behind the same `IPdfDecryptor` port.
 
 ## Development
 
@@ -182,4 +226,8 @@ Commits that add a feature carry `+semver: minor` in the message; GitVersion sta
 
 ## License
 
-[MIT](LICENSE) © Guilherme Branco Stracini
+[GNU Affero General Public License v3.0](LICENSE) © Guilherme Branco Stracini
+
+In short: you may use, modify and redistribute this software, but any distributed or network-served
+derivative must be released under the same licence with its source available. See `LICENSE` for the
+full terms.

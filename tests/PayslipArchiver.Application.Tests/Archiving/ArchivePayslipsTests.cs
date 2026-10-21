@@ -97,6 +97,48 @@ public sealed class ArchivePayslipsTests
         Assert.Equal(2, report.Skipped);
         Assert.Equal(0, report.Archived);
         await _session.DidNotReceive().FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _archive.DidNotReceiveWithAnyArgs().StoreAsync(default!, default, default);
+    }
+
+    [Fact]
+    public async Task FinishesMarkingAnArchivedMessage_TheMailboxStillLists()
+    {
+        // A previous cycle was interrupted after RecordArchivedAsync but before MarkHandledAsync.
+        _session.ListMessageKeysAsync(Arg.Any<CancellationToken>()).Returns(["imap:1:1"]);
+        _ledger.FindAsync("imap:1:1", Arg.Any<CancellationToken>()).Returns(Entry("imap:1:1", ProcessingStatus.Archived));
+
+        var report = await Sut().RunAsync(CancellationToken.None);
+
+        Assert.Equal(new CycleReport(1, Archived: 0, Documents: 0, Ignored: 0, Skipped: 1, Failed: 0), report);
+        await _session.Received(1).MarkHandledAsync("imap:1:1", Arg.Any<CancellationToken>());
+        await _session.DidNotReceive().FetchAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _ledger.DidNotReceiveWithAnyArgs().RecordArchivedAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task AFailureWhileFinishingAnArchivedMessage_IsNotCountedAndDoesNotStopTheCycle()
+    {
+        _session.ListMessageKeysAsync(Arg.Any<CancellationToken>()).Returns(["imap:1:1", "imap:1:2"]);
+        _ledger.FindAsync("imap:1:1", Arg.Any<CancellationToken>()).Returns(Entry("imap:1:1", ProcessingStatus.Archived));
+        _session.MarkHandledAsync("imap:1:1", Arg.Any<CancellationToken>()).ThrowsAsync(new IOException("imap went away"));
+        _session.FetchAsync("imap:1:2", Arg.Any<CancellationToken>()).Returns(Message("imap:1:2", "Payslip_2026-10.pdf"));
+
+        var report = await Sut().RunAsync(CancellationToken.None);
+
+        Assert.Equal(new CycleReport(2, Archived: 1, Documents: 1, Ignored: 0, Skipped: 1, Failed: 0), report);
+        await _ledger.DidNotReceiveWithAnyArgs().RecordFailureAsync(default!, default!, default);
+    }
+
+    [Fact]
+    public async Task LeavesIgnoredMessagesAlone_EvenWhenTheMailboxStillListsThem()
+    {
+        // Filter mismatches are deliberately left unhandled so a human can look at them.
+        _session.ListMessageKeysAsync(Arg.Any<CancellationToken>()).Returns(["imap:1:1"]);
+        _ledger.FindAsync("imap:1:1", Arg.Any<CancellationToken>()).Returns(Entry("imap:1:1", ProcessingStatus.Ignored));
+
+        await Sut().RunAsync(CancellationToken.None);
+
+        await _session.DidNotReceive().MarkHandledAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

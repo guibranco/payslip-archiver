@@ -28,7 +28,7 @@ ARG VERSION=0.1.0
 LABEL org.opencontainers.image.title="payslip-archiver" \
       org.opencontainers.image.description="Watches a payroll mailbox, strips the password from payslip PDFs and archives clean copies to Dropbox" \
       org.opencontainers.image.source="https://github.com/guibranco/payslip-archiver" \
-      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
 
 # qpdf is only needed when Pdf__Engine=Qpdf; it is small, so it ships by default.
@@ -38,6 +38,8 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY --from=build /app .
+# The licence travels with every distributed image (AGPL §4/§5).
+COPY LICENSE /app/LICENSE
 
 # The SQLite ledger lives here; mount it so it survives container recreation
 # (the image runs as the unprivileged `app` user, so a bind mount must be writable by UID 1654).

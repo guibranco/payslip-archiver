@@ -1,8 +1,6 @@
 using PayslipArchiver.Application.Abstractions;
 using PayslipArchiver.Infrastructure.Pdf;
 
-using PdfSharp.Pdf.IO;
-
 namespace PayslipArchiver.Infrastructure.Tests.Pdf;
 
 public sealed class PdfSharpDecryptorTests
@@ -22,7 +20,7 @@ public sealed class PdfSharpDecryptorTests
         var decrypted = _sut.Decrypt(encrypted, Fixture.Password);
 
         Assert.False(Fixture.IsEncrypted(decrypted), "output must not carry an /Encrypt dictionary");
-        using var document = PdfReader.Open(new MemoryStream(decrypted), PdfDocumentOpenMode.Import);
+        using var document = Fixture.Open(decrypted);
         Assert.Equal(1, document.PageCount);
         Assert.Equal("Payslip fixture", document.Info.Title);
     }
@@ -34,7 +32,7 @@ public sealed class PdfSharpDecryptorTests
 
         var result = _sut.Decrypt(plain, Fixture.Password);
 
-        using var document = PdfReader.Open(new MemoryStream(result), PdfDocumentOpenMode.Import);
+        using var document = Fixture.Open(result);
         Assert.Equal(1, document.PageCount);
     }
 
@@ -56,7 +54,7 @@ public sealed class PdfSharpDecryptorTests
         var once = _sut.Decrypt(encrypted, Fixture.Password);
         var twice = _sut.Decrypt(once, Fixture.Password);
 
-        using var document = PdfReader.Open(new MemoryStream(twice), PdfDocumentOpenMode.Import);
+        using var document = Fixture.Open(twice);
         Assert.Equal(1, document.PageCount);
     }
 }

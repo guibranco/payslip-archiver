@@ -1,11 +1,11 @@
-name: CI
+name: Build
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
+# The build job runs PR-controlled code (restore, build, tests) with a read-only token; only the small
+# comment job below, which runs nothing from the PR, gets pull-requests: write.
 permissions:
   contents: read
 
@@ -19,12 +19,14 @@ jobs:
     # The job name is the status-check context the `main` ruleset requires ("build").
     name: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: 🔧 Install GitVersion
         uses: gittools/actions/gitversion/setup@7417b1089e2c7de93510f1901d656ddf60bb024f # v4.7.0
@@ -53,37 +55,59 @@ jobs:
       - name: 🏗️ Build
         run: >-
           dotnet build --no-restore --configuration Release
-          -p:Version=${{ steps.gitversion.outputs.semVer }}
+          -p:Version=${{ steps.gitversion.outputs.majorMinorPatch }}
           -p:InformationalVersion=${{ steps.gitversion.outputs.informationalVersion }}
 
-      - name: 🧪 Test
+      - name: 🧪 Test with coverage
         run: >-
           dotnet test --no-build --configuration Release
           --logger trx
           --results-directory TestResults
           --collect:"XPlat Code Coverage"
 
-      - name: 📊 Upload test results
+      - name: 📊 Generate coverage report
+        if: always()
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.5.11
+        with:
+          reports: TestResults/**/coverage.cobertura.xml
+          targetdir: CoverageReport
+          reporttypes: HtmlInline;Cobertura;MarkdownSummaryGithub;Badges
+          assemblyfilters: -*.Tests
+          title: payslip-archiver
+
+      - name: 📝 Publish coverage summary
+        if: always()
+        run: cat CoverageReport/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 📤 Upload test results and coverage
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-results
-          path: TestResults
+          name: test-results-and-coverage
+          path: |
+            TestResults
+            CoverageReport
           retention-days: 14
 
-      - name: 🚀 Publish (linux-x64, single file)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: >-
-          dotnet publish src/PayslipArchiver.Worker/PayslipArchiver.Worker.csproj
-          --configuration Release --runtime linux-x64
-          -p:Version=${{ steps.gitversion.outputs.semVer }}
-          -p:InformationalVersion=${{ steps.gitversion.outputs.informationalVersion }}
-          --output publish/linux-x64
+  coverage-comment:
+    name: 💬 Coverage comment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build]
+    if: always() && github.event_name == 'pull_request' && needs.build.result != 'cancelled'
+    permissions:
+      pull-requests: write
 
-      - name: 📤 Upload build
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/upload-artifact@v7
+    steps:
+      - name: 📥 Download coverage report
+        uses: actions/download-artifact@v8
         with:
-          name: payslip-archiver-${{ steps.gitversion.outputs.semVer }}-linux-x64
-          path: publish/linux-x64
-          retention-days: 30
+          name: test-results-and-coverage
+          path: reports
+
+      - name: 💬 Comment coverage on the PR
+        continue-on-error: true   # a fork PR's token is read-only; the job summary and artifact still carry the report
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: reports/CoverageReport/SummaryGithub.md
