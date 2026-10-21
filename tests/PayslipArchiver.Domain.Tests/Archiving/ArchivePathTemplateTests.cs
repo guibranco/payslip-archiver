@@ -37,6 +37,18 @@ public sealed class ArchivePathTemplateTests
         Assert.Equal("/pay_slip_2026_.pdf", path);
     }
 
+    [Theory]
+    [InlineData("...pdf")]
+    [InlineData("..pdf")]
+    [InlineData(". .pdf")]
+    public void Render_NeverEmitsATraversalSegment_FromAnAttackerChosenName(string attachmentName)
+    {
+        var path = ArchivePathTemplate.Render("/{original}/{period}.pdf", October, attachmentName);
+
+        Assert.Equal("/_/2026-10.pdf", path);
+        Assert.DoesNotContain("..", path, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Render_DefaultsTheExtensionToPdf()
     {

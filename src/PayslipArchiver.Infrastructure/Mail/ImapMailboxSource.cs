@@ -19,15 +19,17 @@ public sealed partial class ImapMailboxSource : IMailboxSource
 {
     private readonly MailboxOptions _options;
     private readonly MessageFilterOptions _filter;
+    private readonly TimeProvider _clock;
     private readonly ILogger<ImapMailboxSource> _logger;
 
-    public ImapMailboxSource(IOptions<MailboxOptions> options, IOptions<MessageFilterOptions> filter, ILogger<ImapMailboxSource> logger)
+    public ImapMailboxSource(IOptions<MailboxOptions> options, IOptions<MessageFilterOptions> filter, TimeProvider clock, ILogger<ImapMailboxSource> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(filter);
 
         _options = options.Value;
         _filter = filter.Value;
+        _clock = clock;
         _logger = logger;
     }
 
@@ -36,7 +38,9 @@ public sealed partial class ImapMailboxSource : IMailboxSource
         var client = new ImapClient { Timeout = (int)_options.Timeout.TotalMilliseconds };
         try
         {
-            var security = _options.UseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTlsWhenAvailable;
+            // StartTls (not StartTlsWhenAvailable): if the server cannot upgrade the connection, fail rather than
+            // send the mailbox password in the clear to whoever stripped the STARTTLS capability.
+            var security = _options.UseSsl ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
             await client.ConnectAsync(_options.Host, _options.Port, security, cancellationToken).ConfigureAwait(false);
             await client.AuthenticateAsync(_options.Username, _options.Password, cancellationToken).ConfigureAwait(false);
 
@@ -45,7 +49,7 @@ public sealed partial class ImapMailboxSource : IMailboxSource
                 : await client.GetFolderAsync(_options.Folder, cancellationToken).ConfigureAwait(false);
             await folder.OpenAsync(FolderAccess.ReadWrite, cancellationToken).ConfigureAwait(false);
 
-            return new Session(client, folder, _options, _filter, _logger);
+            return new Session(client, folder, _options, _filter, _clock, _logger);
         }
         catch
         {
@@ -65,16 +69,18 @@ public sealed partial class ImapMailboxSource : IMailboxSource
         private readonly IMailFolder _folder;
         private readonly MailboxOptions _options;
         private readonly MessageFilterOptions _filter;
+        private readonly TimeProvider _clock;
         private readonly ILogger _logger;
         private readonly Dictionary<string, UniqueId> _uids = new(StringComparer.Ordinal);
         private IMailFolder? _processedFolder;
 
-        public Session(ImapClient client, IMailFolder folder, MailboxOptions options, MessageFilterOptions filter, ILogger logger)
+        public Session(ImapClient client, IMailFolder folder, MailboxOptions options, MessageFilterOptions filter, TimeProvider clock, ILogger logger)
         {
             _client = client;
             _folder = folder;
             _options = options;
             _filter = filter;
+            _clock = clock;
             _logger = logger;
         }
 
@@ -107,8 +113,14 @@ public sealed partial class ImapMailboxSource : IMailboxSource
 
         public async Task<IncomingMessage> FetchAsync(string key, CancellationToken cancellationToken)
         {
-            var message = await _folder.GetMessageAsync(Uid(key), cancellationToken).ConfigureAwait(false);
-            return MimeMessageMapper.ToIncomingMessage(key, message);
+            var uid = Uid(key);
+            var message = await _folder.GetMessageAsync(uid, cancellationToken).ConfigureAwait(false);
+
+            // The server's delivery timestamp stands in for a missing/unparseable Date header.
+            var summaries = await _folder.FetchAsync([uid], MessageSummaryItems.InternalDate, cancellationToken).ConfigureAwait(false);
+            var fallback = summaries.FirstOrDefault()?.InternalDate ?? _clock.GetUtcNow();
+
+            return MimeMessageMapper.ToIncomingMessage(key, message, fallback);
         }
 
         public async Task MarkHandledAsync(string key, CancellationToken cancellationToken)

@@ -63,9 +63,19 @@ public sealed partial class ArchivePayslips
         var keys = await session.ListMessageKeysAsync(cancellationToken).ConfigureAwait(false);
         LogListed(keys.Count);
 
-        foreach (var key in keys.Take(_pipeline.MaxMessagesPerCycle))
+        // The cap counts messages actually attempted, not keys listed: POP3 lists the whole mailbox and IMAP keeps
+        // ignored (never flagged) messages in the unseen set, so a cap on the listing would let old, already-known
+        // keys starve new payslips forever.
+        var attempted = 0;
+        foreach (var key in keys)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (attempted >= _pipeline.MaxMessagesPerCycle)
+            {
+                LogCapReached(_pipeline.MaxMessagesPerCycle, keys.Count);
+                break;
+            }
 
             var entry = await _ledger.FindAsync(key, cancellationToken).ConfigureAwait(false);
             if (entry is { Status: ProcessingStatus.Archived or ProcessingStatus.Ignored })
@@ -81,6 +91,7 @@ public sealed partial class ArchivePayslips
                 continue;
             }
 
+            attempted++;
             try
             {
                 var outcome = await ProcessAsync(session, key, cancellationToken).ConfigureAwait(false);
@@ -177,4 +188,7 @@ public sealed partial class ArchivePayslips
 
     [LoggerMessage(EventId = 1006, Level = LogLevel.Information, Message = "Cycle finished: {Report}")]
     private partial void LogCycleFinished(CycleReport report);
+
+    [LoggerMessage(EventId = 1007, Level = LogLevel.Information, Message = "Reached the cap of {Cap} message(s) for this cycle out of {Listed} listed; the rest will be picked up next cycle")]
+    private partial void LogCapReached(int cap, int listed);
 }

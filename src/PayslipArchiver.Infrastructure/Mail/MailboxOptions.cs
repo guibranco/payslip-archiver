@@ -22,7 +22,10 @@ public sealed class MailboxOptions
     [Range(1, 65535)]
     public int Port { get; set; } = 993;
 
-    /// <summary>True = TLS on connect (implicit); false = STARTTLS when the server offers it.</summary>
+    /// <summary>
+    /// True = TLS on connect (implicit, ports 993/995); false = STARTTLS, which is <em>required</em>: the
+    /// connection is refused if the server cannot upgrade it. Plaintext authentication is never used.
+    /// </summary>
     public bool UseSsl { get; set; } = true;
 
     [Required]

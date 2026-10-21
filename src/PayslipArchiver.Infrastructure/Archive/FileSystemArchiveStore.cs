@@ -23,7 +23,10 @@ public sealed class FileSystemArchiveStore : IArchiveStore
 
         var relative = path.Replace('\\', '/').TrimStart('/');
         var target = Path.GetFullPath(Path.Combine(_root, relative));
-        if (!target.StartsWith(_root, StringComparison.Ordinal))
+
+        // Compare against the root *plus a separator* so a sibling such as "<root>-other" cannot pass as a prefix.
+        var rootWithSeparator = Path.EndsInDirectorySeparator(_root) ? _root : _root + Path.DirectorySeparatorChar;
+        if (!target.StartsWith(rootWithSeparator, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Refusing to write outside the archive root: {path}");
         }

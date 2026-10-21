@@ -222,6 +222,31 @@ public sealed class ArchivePayslipsTests
     }
 
     [Fact]
+    public async Task TheCap_CountsAttemptedMessages_SoKnownKeysCannotStarveNewOnes()
+    {
+        // POP3 lists the whole mailbox every cycle; the first keys are all long archived.
+        _pipeline.MaxMessagesPerCycle = 2;
+        var keys = new[] { "pop3:old-1", "pop3:old-2", "pop3:old-3", "pop3:new-1", "pop3:new-2", "pop3:new-3" };
+        _session.ListMessageKeysAsync(Arg.Any<CancellationToken>()).Returns(keys);
+        foreach (var key in keys.Take(3))
+        {
+            _ledger.FindAsync(key, Arg.Any<CancellationToken>()).Returns(Entry(key, ProcessingStatus.Archived));
+        }
+
+        foreach (var key in keys.Skip(3))
+        {
+            _session.FetchAsync(key, Arg.Any<CancellationToken>()).Returns(Message(key, $"Payslip_{key[^1]}.pdf"));
+        }
+
+        var report = await Sut().RunAsync(CancellationToken.None);
+
+        Assert.Equal(new CycleReport(6, Archived: 2, Documents: 2, Ignored: 0, Skipped: 3, Failed: 0), report);
+        await _session.Received(1).FetchAsync("pop3:new-1", Arg.Any<CancellationToken>());
+        await _session.Received(1).FetchAsync("pop3:new-2", Arg.Any<CancellationToken>());
+        await _session.DidNotReceive().FetchAsync("pop3:new-3", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Cancellation_PropagatesInsteadOfBeingRecordedAsAFailure()
     {
         using var cts = new CancellationTokenSource();

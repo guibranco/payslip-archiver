@@ -46,11 +46,15 @@ public static partial class ArchivePathTemplate
         return Normalise(rendered);
     }
 
-    /// <summary>Strips characters that are illegal in file names on Windows, Dropbox or Linux.</summary>
+    /// <summary>
+    /// Strips characters that are illegal in file names on Windows, Dropbox or Linux, and neutralises
+    /// dot-only segments (<c>.</c>, <c>..</c>) so an attacker-chosen attachment name can never become a
+    /// path-traversal segment when a template uses <c>{original}</c> as a whole directory level.
+    /// </summary>
     public static string Sanitise(string segment)
     {
         var cleaned = IllegalFileNameCharacters().Replace(segment, "_").Trim();
-        return cleaned.Length == 0 ? "_" : cleaned;
+        return cleaned.Length == 0 || cleaned.All(c => c == '.') ? "_" : cleaned;
     }
 
     private static string Normalise(string path)

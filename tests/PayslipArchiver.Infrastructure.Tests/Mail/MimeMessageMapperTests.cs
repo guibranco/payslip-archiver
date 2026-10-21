@@ -6,6 +6,8 @@ namespace PayslipArchiver.Infrastructure.Tests.Mail;
 
 public sealed class MimeMessageMapperTests
 {
+    private static readonly DateTimeOffset Fallback = new(2026, 10, 31, 12, 0, 0, TimeSpan.Zero);
+
     [Fact]
     public void MapsHeaders_AndDecodesPdfAttachments()
     {
@@ -22,7 +24,7 @@ public sealed class MimeMessageMapperTests
         builder.Attachments.Add("notes.txt", "not a pdf"u8.ToArray(), ContentType.Parse("text/plain"));
         message.Body = builder.ToMessageBody();
 
-        var incoming = MimeMessageMapper.ToIncomingMessage("imap:1:42", message);
+        var incoming = MimeMessageMapper.ToIncomingMessage("imap:1:42", message, Fallback);
 
         Assert.Equal("imap:1:42", incoming.Key);
         Assert.Equal("abc@example.com", incoming.MessageId);
@@ -52,7 +54,7 @@ public sealed class MimeMessageMapperTests
         };
         message.Body = new Multipart("mixed") { new TextPart("plain") { Text = "hi" }, pdfPart };
 
-        var incoming = MimeMessageMapper.ToIncomingMessage("pop3:x", message);
+        var incoming = MimeMessageMapper.ToIncomingMessage("pop3:x", message, Fallback);
 
         var pdf = Assert.Single(incoming.Attachments);
         Assert.True(pdf.IsPdf);
@@ -65,9 +67,34 @@ public sealed class MimeMessageMapperTests
         var message = new MimeMessage { Body = new TextPart("plain") { Text = "hi" } };
         message.From.Add(new MailboxAddress("Payroll", "payroll@example.com"));
 
-        var incoming = MimeMessageMapper.ToIncomingMessage("pop3:y", message);
+        var incoming = MimeMessageMapper.ToIncomingMessage("pop3:y", message, Fallback);
 
         Assert.Equal(string.Empty, incoming.Subject);
         Assert.Empty(incoming.Attachments);
+    }
+
+    [Fact]
+    public void UsesTheFallbackDate_WhenTheDateHeaderIsMissing()
+    {
+        // Parsed from the wire with no Date header: MimeKit reports DateTimeOffset.MinValue.
+        var raw = "From: payroll@example.com\r\nSubject: Payslip\r\n\r\nno date header\r\n";
+        var message = MimeMessage.Load(new MemoryStream(System.Text.Encoding.ASCII.GetBytes(raw)));
+        Assert.Equal(DateTimeOffset.MinValue, message.Date);
+
+        var incoming = MimeMessageMapper.ToIncomingMessage("pop3:z", message, Fallback);
+
+        Assert.Equal(Fallback, incoming.ReceivedAt);
+    }
+
+    [Fact]
+    public void KeepsTheDateHeader_WhenPresent()
+    {
+        var message = new MimeMessage { Body = new TextPart("plain") { Text = "hi" } };
+        message.From.Add(new MailboxAddress("Payroll", "payroll@example.com"));
+        message.Date = new DateTimeOffset(2026, 10, 25, 8, 30, 0, TimeSpan.Zero);
+
+        var incoming = MimeMessageMapper.ToIncomingMessage("pop3:w", message, Fallback);
+
+        Assert.Equal(new DateTimeOffset(2026, 10, 25, 8, 30, 0, TimeSpan.Zero), incoming.ReceivedAt);
     }
 }

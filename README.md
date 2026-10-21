@@ -90,7 +90,7 @@ and refuses to start with a clear message when something is missing.
 | Section · key | Default | Notes |
 |---|---|---|
 | `Mailbox:Protocol` | `Imap` | `Imap` or `Pop3`. POP3 needs server UIDL support and cannot flag messages, so the ledger does all the de-duplication. |
-| `Mailbox:Host` / `Port` / `UseSsl` | – / `993` / `true` | `UseSsl=false` means STARTTLS when offered. |
+| `Mailbox:Host` / `Port` / `UseSsl` | – / `993` / `true` | `UseSsl=false` means STARTTLS, and it is required — the connection is refused rather than downgraded to plaintext. |
 | `Mailbox:Username` / `Password` | – | Use an app password where the provider offers one. |
 | `Mailbox:Folder` | `INBOX` | IMAP folder to watch. |
 | `Mailbox:ProcessedFolder` | `Processed` | IMAP: handled messages are moved here (created on demand). Empty = leave in place. |
@@ -174,7 +174,7 @@ in the wild. Set `Pdf:Engine=Qpdf` if a provider ever ships something PDFsharp c
 
 ```bash
 dotnet build          # warnings are errors; analyzers at latest-recommended
-dotnet test           # 96 tests; the qpdf ones skip themselves when qpdf is not installed
+dotnet test           # the qpdf tests skip themselves when qpdf is not installed
 scripts/make-fixtures.sh   # only if you change the test PDFs (needs qpdf + python3)
 ```
 

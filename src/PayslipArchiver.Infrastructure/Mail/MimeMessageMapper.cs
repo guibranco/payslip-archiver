@@ -9,7 +9,14 @@ internal static class MimeMessageMapper
 {
     private const string PdfMimeType = "application/pdf";
 
-    public static IncomingMessage ToIncomingMessage(string key, MimeMessage message)
+    /// <param name="key">The source-specific message key.</param>
+    /// <param name="message">The parsed message.</param>
+    /// <param name="fallbackReceivedAt">
+    /// Used when the message carries no parseable <c>Date</c> header (MimeKit then reports
+    /// <see cref="DateTimeOffset.MinValue"/>): the server's delivery timestamp where the protocol offers one,
+    /// otherwise the current time. The domain must never see a bogus year-0001 date.
+    /// </param>
+    public static IncomingMessage ToIncomingMessage(string key, MimeMessage message, DateTimeOffset fallbackReceivedAt)
     {
         var attachments = new List<MailAttachment>();
 
@@ -47,7 +54,7 @@ internal static class MimeMessageMapper
             string.IsNullOrWhiteSpace(message.MessageId) ? null : message.MessageId,
             message.From.ToString(),
             message.Subject ?? string.Empty,
-            message.Date,
+            message.Date == DateTimeOffset.MinValue ? fallbackReceivedAt : message.Date,
             attachments);
     }
 }

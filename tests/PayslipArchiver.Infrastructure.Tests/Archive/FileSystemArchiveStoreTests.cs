@@ -38,11 +38,24 @@ public sealed class FileSystemArchiveStoreTests : IDisposable
         Assert.Equal("three", await File.ReadAllTextAsync(third));
     }
 
-    [Fact]
-    public async Task Store_RefusesToEscapeTheRoot()
+    [Theory]
+    [InlineData("/../outside.pdf")]
+    [InlineData("/2026/../../outside.pdf")]
+    public async Task Store_RefusesToEscapeTheRoot(string path)
     {
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _sut.StoreAsync("/../outside.pdf", "x"u8.ToArray(), CancellationToken.None));
+            () => _sut.StoreAsync(path, "x"u8.ToArray(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Store_RefusesASiblingDirectoryThatSharesTheRootPrefix()
+    {
+        var sibling = _root + "-other";
+        var escaping = "/../" + Path.GetFileName(sibling) + "/x.pdf";
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _sut.StoreAsync(escaping, "x"u8.ToArray(), CancellationToken.None));
+        Assert.False(Directory.Exists(sibling));
     }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);

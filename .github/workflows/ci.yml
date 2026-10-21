@@ -59,7 +59,7 @@ jobs:
       - name: 🧪 Test
         run: >-
           dotnet test --no-build --configuration Release
-          --logger "trx;LogFileName=test-results.trx"
+          --logger trx
           --results-directory TestResults
           --collect:"XPlat Code Coverage"
 
