@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>PayslipArchiver.Infrastructure</RootNamespace>
+    <Description>Adapters: MailKit (IMAP/POP3) mailbox sources, PDFsharp/qpdf decryptors, Dropbox and file-system archive stores, SQLite ledger, Healthchecks.io heartbeat.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PayslipArchiver.Application\PayslipArchiver.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dropbox.Api" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
+    <PackageReference Include="PDFsharp" />
+    <!-- Lifts MimeKit's vulnerable transitive pin; see Directory.Packages.props. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PayslipArchiver.Infrastructure.Tests" />
+  </ItemGroup>
+
+</Project>

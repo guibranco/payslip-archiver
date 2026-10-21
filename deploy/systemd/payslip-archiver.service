@@ -1,0 +1,51 @@
+# /etc/systemd/system/payslip-archiver.service
+#
+# Runs the single-file publish output as a long-lived service (Type=notify works because the
+# host calls AddSystemd()). Install:
+#
+#   sudo useradd --system --home /opt/payslip-archiver --shell /usr/sbin/nologin payslip
+#   sudo mkdir -p /opt/payslip-archiver/bin /var/lib/payslip-archiver /etc/payslip-archiver
+#   sudo cp publish/linux-x64/* /opt/payslip-archiver/bin/
+#   sudo cp deploy/systemd/payslip-archiver.env /etc/payslip-archiver/env   # then fill in the secrets
+#   sudo chown -R payslip:payslip /opt/payslip-archiver /var/lib/payslip-archiver
+#   sudo chmod 600 /etc/payslip-archiver/env
+#   sudo cp deploy/systemd/payslip-archiver.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now payslip-archiver
+#   journalctl -u payslip-archiver -f
+
+[Unit]
+Description=Payslip archiver (mailbox -> decrypt -> Dropbox)
+Documentation=https://github.com/guibranco/payslip-archiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=payslip
+Group=payslip
+WorkingDirectory=/opt/payslip-archiver/bin
+EnvironmentFile=/etc/payslip-archiver/env
+Environment=DOTNET_ENVIRONMENT=Production
+Environment=Ledger__Path=/var/lib/payslip-archiver/ledger.db
+ExecStart=/opt/payslip-archiver/bin/payslip-archiver
+Restart=on-failure
+RestartSec=30s
+TimeoutStopSec=30s
+SyslogIdentifier=payslip-archiver
+
+# Hardening. On LXC targets drop ProtectSystem=strict and PrivateTmp=true — they fail to apply there.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/payslip-archiver
+# The single-file host extracts native libraries here on first start.
+Environment=DOTNET_BUNDLE_EXTRACT_BASE_DIR=/var/lib/payslip-archiver/.net
+
+[Install]
+WantedBy=multi-user.target

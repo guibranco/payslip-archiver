@@ -1,0 +1,32 @@
+# docker compose -f deploy/docker-compose.yml up -d
+#
+# Secrets come from a .env file next to this one (never committed) — copy
+# deploy/systemd/payslip-archiver.env to deploy/.env and fill it in.
+#
+# `format: raw` (Compose 2.30.0+) stops Compose from interpolating `$NAME` inside the values, so a
+# mailbox or PDF password containing a dollar sign reaches the worker unchanged.
+services:
+  payslip-archiver:
+    build:
+      context: ..
+      args:
+        VERSION: ${VERSION:-0.1.0}
+    image: ghcr.io/guibranco/payslip-archiver:${VERSION:-latest}
+    container_name: payslip-archiver
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        format: raw
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      Ledger__Path: /data/ledger.db
+    volumes:
+      - payslip-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+
+volumes:
+  payslip-data:

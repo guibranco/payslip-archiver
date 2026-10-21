@@ -1,0 +1,16 @@
+<Project>
+
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!--
+      CA1707: test names use underscores by convention (Method_Scenario_Outcome).
+      CA2007: ConfigureAwait(false) adds nothing in xunit tests.
+      CA1515: test classes must stay public for the runner to discover them.
+    -->
+    <NoWarn>$(NoWarn);CA1707;CA2007;CA1515</NoWarn>
+  </PropertyGroup>
+
+</Project>
