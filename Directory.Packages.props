@@ -18,24 +18,19 @@
     <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.13" />
     <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.13" />
-    <!--
-      Pinned to the 6.2.x line on purpose: 6.5.0 switched PDFsharp from MIT to AGPL-3.0 (or a paid commercial
-      licence) and throws PdfSharpLicenseException unless PdfSharpLicense.SetAgplLicense() is called. 6.2.4 is the
-      last MIT release and already reads AES-256 (R6) documents, which is all this project needs. Bumping past it
-      is a licensing decision, not a routine update.
-    -->
-    <PackageVersion Include="PDFsharp" Version="6.2.4" />
+    <!-- 6.5+ is AGPL-3.0 (or commercial) and needs PdfSharpLicense.SetAgplLicense() at start-up; this repo is AGPL-3.0 too. -->
+    <PackageVersion Include="PDFsharp" Version="6.5.0" />
     <!-- Transitive via MimeKit, which pins 10.0.0; that version has known advisories (GHSA-846f-f764-76mx), so it is lifted explicitly. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
-    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>
 
 </Project>

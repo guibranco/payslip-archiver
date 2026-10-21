@@ -1,3 +1,7 @@
+using PdfSharp;
+using PdfSharp.Pdf;
+using PdfSharp.Pdf.IO;
+
 namespace PayslipArchiver.Infrastructure.Tests.Pdf;
 
 internal static class Fixture
@@ -14,4 +18,14 @@ internal static class Fixture
 
     /// <summary>A PDF with no <c>/Encrypt</c> entry in its trailer is, by definition, not encrypted.</summary>
     public static bool IsEncrypted(ReadOnlySpan<byte> pdf) => pdf.IndexOf("/Encrypt"u8) >= 0;
+
+    /// <summary>
+    /// Opens a decrypted document for inspection. PDFsharp 6.5+ needs a licence declared in every process
+    /// that uses it, the test runner included; the decryptor under test may not be the PDFsharp one.
+    /// </summary>
+    public static PdfDocument Open(byte[] pdf)
+    {
+        PdfSharpLicense.SetAgplLicense();
+        return PdfReader.Open(new MemoryStream(pdf), PdfDocumentOpenMode.Import);
+    }
 }

@@ -1,5 +1,6 @@
 using PayslipArchiver.Application.Abstractions;
 
+using PdfSharp;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 
@@ -16,9 +17,20 @@ namespace PayslipArchiver.Infrastructure.Pdf;
 /// </remarks>
 public sealed class PdfSharpDecryptor : IPdfDecryptor
 {
+    /// <summary>
+    /// PDFsharp 6.5+ throws <c>PdfSharpLicenseException</c> until a licence is declared. This project is
+    /// distributed under the AGPL-3.0, so the AGPL option applies; it only needs to be set once per process.
+    /// </summary>
+    private static readonly Lazy<bool> LicenseDeclared = new(() =>
+    {
+        PdfSharpLicense.SetAgplLicense();
+        return true;
+    });
+
     public byte[] Decrypt(ReadOnlyMemory<byte> encryptedPdf, string password)
     {
         ArgumentNullException.ThrowIfNull(password);
+        _ = LicenseDeclared.Value;
 
         try
         {

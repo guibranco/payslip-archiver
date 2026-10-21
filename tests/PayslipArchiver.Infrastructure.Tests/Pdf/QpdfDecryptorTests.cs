@@ -5,8 +5,6 @@ using Microsoft.Extensions.Options;
 using PayslipArchiver.Application.Abstractions;
 using PayslipArchiver.Infrastructure.Pdf;
 
-using PdfSharp.Pdf.IO;
-
 namespace PayslipArchiver.Infrastructure.Tests.Pdf;
 
 /// <summary>Skips automatically when qpdf is not installed on the machine running the tests.</summary>
@@ -64,7 +62,7 @@ public sealed class QpdfDecryptorTests
         var decrypted = _sut.Decrypt(Fixture.Read(fixture), Fixture.Password);
 
         Assert.False(Fixture.IsEncrypted(decrypted));
-        using var document = PdfReader.Open(new MemoryStream(decrypted), PdfDocumentOpenMode.Import);
+        using var document = Fixture.Open(decrypted);
         Assert.Equal(1, document.PageCount);
     }
 

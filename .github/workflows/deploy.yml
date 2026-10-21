@@ -1,0 +1,270 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time: two quick merges to main must not race each other onto the host or into the
+# same version number.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+# Every push to main is built, tested, deployed to vinhedo3 as a systemd service and then tagged as a
+# release. GitVersion computes the version from the commit messages (`+semver: major|minor|patch`,
+# default patch); the tag is only created after the deploy succeeded, so a failed deploy can simply be
+# re-run and lands on the same version.
+#
+# Repository secrets:
+#   SSH_HOST, SSH_USER, SSH_PRIVATE_KEY, SSH_PORT (optional)   — the deploy user on vinhedo3; needs
+#                                                                 passwordless sudo for install.sh
+#                                                                 (sudoers line in README → Deploying)
+#   MAILBOX_HOST, MAILBOX_USERNAME, MAILBOX_PASSWORD          — the payroll mailbox
+#   MAILBOX_PORT, MAILBOX_PROTOCOL (optional)                 — default 993 / Imap
+#   FILTER_FROM_CONTAINS, FILTER_SUBJECT_CONTAINS (optional)  — what counts as a payslip e-mail
+#   PDF_PASSWORD                                              — the password the provider uses
+#   DROPBOX_APP_KEY, DROPBOX_REFRESH_TOKEN                    — from `payslip-archiver authorize-dropbox`
+#   DROPBOX_ROOT_PATH (optional)                              — default "/"
+#   HEARTBEAT_PING_URL (optional)                             — Healthchecks.io ping URL
+jobs:
+  # ── 1. Build & test ──────────────────────────────────────────────────────────
+  build:
+    name: 🏗️ Build & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.gitversion.outputs.majorMinorPatch }}
+      informationalVersion: ${{ steps.gitversion.outputs.informationalVersion }}
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Install GitVersion
+        uses: gittools/actions/gitversion/setup@7417b1089e2c7de93510f1901d656ddf60bb024f # v4.7.0
+        with:
+          versionSpec: "6.x"
+
+      - name: 🏷️ Determine Version Number
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@7417b1089e2c7de93510f1901d656ddf60bb024f # v4.7.0
+
+      - name: 🛡️ Check version is not already released
+        env:
+          VERSION: v${{ steps.gitversion.outputs.majorMinorPatch }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${VERSION}" > /dev/null; then
+            echo "::error::Tag ${VERSION} already exists but GitVersion still computes it. Refusing to overwrite a published release."
+            exit 1
+          fi
+          echo "Building ${VERSION}"
+
+      - name: 🟣 Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: 📦 Install qpdf
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq qpdf
+
+      - name: 🧩 Restore
+        run: dotnet restore
+
+      - name: 🏗️ Build
+        run: >-
+          dotnet build --no-restore --configuration Release
+          -p:Version=${{ steps.gitversion.outputs.majorMinorPatch }}
+          -p:InformationalVersion=${{ steps.gitversion.outputs.informationalVersion }}
+
+      - name: 🧪 Test
+        run: dotnet test --no-build --configuration Release
+
+      - name: 🚀 Publish (linux-x64, single file)
+        run: >-
+          dotnet publish src/PayslipArchiver.Worker/PayslipArchiver.Worker.csproj
+          --configuration Release --runtime linux-x64
+          -p:Version=${{ steps.gitversion.outputs.majorMinorPatch }}
+          -p:InformationalVersion=${{ steps.gitversion.outputs.informationalVersion }}
+          --output publish/linux-x64
+
+      - name: 🗜️ Package release
+        env:
+          VERSION: ${{ steps.gitversion.outputs.majorMinorPatch }}
+        run: |
+          rm -f publish/linux-x64/*.pdb publish/linux-x64/appsettings.Development.json
+          cp deploy/systemd/payslip-archiver.service publish/linux-x64/
+          cp deploy/scripts/install.sh publish/linux-x64/
+          echo "${VERSION}" > publish/linux-x64/VERSION
+          mkdir -p dist
+          tar -C publish/linux-x64 -czf "dist/payslip-archiver-${VERSION}-linux-x64.tar.gz" .
+          (cd dist && sha256sum "payslip-archiver-${VERSION}-linux-x64.tar.gz" > "payslip-archiver-${VERSION}-linux-x64.tar.gz.sha256")
+          ls -l dist
+
+      - name: 📤 Upload release package
+        uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: dist
+          retention-days: 7
+          if-no-files-found: error
+
+  # ── 2. Deploy to vinhedo3 ────────────────────────────────────────────────────
+  deploy:
+    name: 🚀 Deploy to vinhedo3
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build]
+    environment: production
+
+    steps:
+      - name: 📥 Download release package
+        uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: dist
+
+      - name: 🔑 Render environment file from secrets
+        env:
+          MAILBOX_PROTOCOL: ${{ secrets.MAILBOX_PROTOCOL }}
+          MAILBOX_HOST: ${{ secrets.MAILBOX_HOST }}
+          MAILBOX_PORT: ${{ secrets.MAILBOX_PORT }}
+          MAILBOX_USERNAME: ${{ secrets.MAILBOX_USERNAME }}
+          MAILBOX_PASSWORD: ${{ secrets.MAILBOX_PASSWORD }}
+          FILTER_FROM_CONTAINS: ${{ secrets.FILTER_FROM_CONTAINS }}
+          FILTER_SUBJECT_CONTAINS: ${{ secrets.FILTER_SUBJECT_CONTAINS }}
+          PDF_PASSWORD: ${{ secrets.PDF_PASSWORD }}
+          DROPBOX_APP_KEY: ${{ secrets.DROPBOX_APP_KEY }}
+          DROPBOX_REFRESH_TOKEN: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+          DROPBOX_ROOT_PATH: ${{ secrets.DROPBOX_ROOT_PATH }}
+          HEARTBEAT_PING_URL: ${{ secrets.HEARTBEAT_PING_URL }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for required in MAILBOX_HOST MAILBOX_USERNAME MAILBOX_PASSWORD PDF_PASSWORD DROPBOX_APP_KEY DROPBOX_REFRESH_TOKEN; do
+            if [[ -z "${!required}" ]]; then
+              echo "::error::Repository secret ${required} is not set"
+              exit 1
+            fi
+          done
+          umask 077
+          # systemd EnvironmentFile: KEY=value, no shell quoting, so values are written verbatim.
+          cat > payslip-archiver.env <<EOF
+          # Rendered by the Deploy workflow for v${VERSION}; edit the repository secrets, not this file.
+          Mailbox__Protocol=${MAILBOX_PROTOCOL:-Imap}
+          Mailbox__Host=${MAILBOX_HOST}
+          Mailbox__Port=${MAILBOX_PORT:-993}
+          Mailbox__UseSsl=true
+          Mailbox__Username=${MAILBOX_USERNAME}
+          Mailbox__Password=${MAILBOX_PASSWORD}
+          Mailbox__Folder=INBOX
+          Mailbox__ProcessedFolder=Processed
+          Filter__FromContains=${FILTER_FROM_CONTAINS}
+          Filter__SubjectContains=${FILTER_SUBJECT_CONTAINS}
+          Filter__AttachmentPattern=*.pdf
+          Pdf__Password=${PDF_PASSWORD}
+          Archive__Provider=Dropbox
+          Dropbox__AppKey=${DROPBOX_APP_KEY}
+          Dropbox__RefreshToken=${DROPBOX_REFRESH_TOKEN}
+          Dropbox__RootPath=${DROPBOX_ROOT_PATH:-/}
+          Schedule__Interval=00:30:00
+          Heartbeat__PingUrl=${HEARTBEAT_PING_URL}
+          EOF
+          echo "Rendered $(grep -c '=' payslip-archiver.env) settings"
+
+      - name: 🔑 Write SSH private key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${SSH_PORT}" "${SSH_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: 📦 Upload release and secrets
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+            "rm -rf ~/payslip-archiver-deploy && mkdir -p ~/payslip-archiver-deploy && chmod 700 ~/payslip-archiver-deploy"
+          scp -i ~/.ssh/deploy_key -P "${SSH_PORT}" \
+            "dist/payslip-archiver-${VERSION}-linux-x64.tar.gz" \
+            "dist/payslip-archiver-${VERSION}-linux-x64.tar.gz.sha256" \
+            payslip-archiver.env \
+            "${SSH_USER}@${SSH_HOST}:~/payslip-archiver-deploy/"
+
+      - name: 🚀 Install and restart the service
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT || 22 }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" \
+            VERSION="${VERSION}" bash -s <<'ENDSSH'
+            set -euo pipefail
+            cd ~/payslip-archiver-deploy
+            echo "🔍 Verifying checksum"
+            sha256sum -c "payslip-archiver-${VERSION}-linux-x64.tar.gz.sha256"
+            echo "📂 Extracting release"
+            rm -rf release && mkdir release
+            tar -C release -xzf "payslip-archiver-${VERSION}-linux-x64.tar.gz"
+            chmod +x release/install.sh release/payslip-archiver
+            echo "⚙️  Installing v${VERSION}"
+            # Absolute path on purpose: it is what the sudoers rule for the deploy user pins.
+            sudo "${HOME}/payslip-archiver-deploy/release/install.sh" "${HOME}/payslip-archiver-deploy/release" "${HOME}/payslip-archiver-deploy/payslip-archiver.env"
+            echo "🧹 Cleaning up"
+            cd ~ && rm -rf ~/payslip-archiver-deploy
+          ENDSSH
+
+      - name: 🧹 Remove private key and secrets
+        if: always()
+        run: rm -f ~/.ssh/deploy_key payslip-archiver.env
+
+  # ── 3. Tag & GitHub release ──────────────────────────────────────────────────
+  release:
+    name: 📢 Tag & release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [build, deploy]
+    permissions:
+      contents: write
+
+    steps:
+      - name: 📥 Download release package
+        uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: dist
+
+      - name: 🏷️ Create release
+        uses: ncipollo/release-action@v1
+        with:
+          skipIfReleaseExists: true
+          allowUpdates: false
+          draft: false
+          makeLatest: true
+          commit: ${{ github.sha }}
+          tag: v${{ needs.build.outputs.version }}
+          name: v${{ needs.build.outputs.version }}
+          generateReleaseNotes: true
+          artifacts: dist/*
+          body: |
+            ## payslip-archiver v${{ needs.build.outputs.version }}
+
+            Built from `${{ github.sha }}` (`${{ needs.build.outputs.informationalVersion }}`) and deployed to vinhedo3.
+
+            The attached `payslip-archiver-${{ needs.build.outputs.version }}-linux-x64.tar.gz` is the self-contained
+            build with the systemd unit and `install.sh`; see `deploy/scripts/install.sh` for the manual install.

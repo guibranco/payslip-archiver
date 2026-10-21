@@ -1,13 +1,12 @@
-name: CI
+name: Build
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+  pull-requests: write
 
 env:
   DOTNET_NOLOGO: true
@@ -19,6 +18,7 @@ jobs:
     # The job name is the status-check context the `main` ruleset requires ("build").
     name: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: 📥 Checkout Repository
@@ -53,37 +53,44 @@ jobs:
       - name: 🏗️ Build
         run: >-
           dotnet build --no-restore --configuration Release
-          -p:Version=${{ steps.gitversion.outputs.semVer }}
+          -p:Version=${{ steps.gitversion.outputs.majorMinorPatch }}
           -p:InformationalVersion=${{ steps.gitversion.outputs.informationalVersion }}
 
-      - name: 🧪 Test
+      - name: 🧪 Test with coverage
         run: >-
           dotnet test --no-build --configuration Release
           --logger trx
           --results-directory TestResults
           --collect:"XPlat Code Coverage"
 
-      - name: 📊 Upload test results
+      - name: 📊 Generate coverage report
+        if: always()
+        uses: danielpalme/ReportGenerator-GitHub-Action@5.5.11
+        with:
+          reports: TestResults/**/coverage.cobertura.xml
+          targetdir: CoverageReport
+          reporttypes: HtmlInline;Cobertura;MarkdownSummaryGithub;Badges
+          assemblyfilters: -*.Tests
+          title: payslip-archiver
+
+      - name: 📝 Publish coverage summary
+        if: always()
+        run: cat CoverageReport/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 💬 Comment coverage on the PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: CoverageReport/SummaryGithub.md
+
+      - name: 📤 Upload test results and coverage
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: test-results
-          path: TestResults
+          name: test-results-and-coverage
+          path: |
+            TestResults
+            CoverageReport
           retention-days: 14
-
-      - name: 🚀 Publish (linux-x64, single file)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: >-
-          dotnet publish src/PayslipArchiver.Worker/PayslipArchiver.Worker.csproj
-          --configuration Release --runtime linux-x64
-          -p:Version=${{ steps.gitversion.outputs.semVer }}
-          -p:InformationalVersion=${{ steps.gitversion.outputs.informationalVersion }}
-          --output publish/linux-x64
-
-      - name: 📤 Upload build
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/upload-artifact@v7
-        with:
-          name: payslip-archiver-${{ steps.gitversion.outputs.semVer }}-linux-x64
-          path: publish/linux-x64
-          retention-days: 30
