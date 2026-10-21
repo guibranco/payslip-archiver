@@ -107,7 +107,7 @@ jobs:
 
       - name: 💬 Comment coverage on the PR
         continue-on-error: true   # a fork PR's token is read-only; the job summary and artifact still carry the report
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3
         with:
           header: coverage
           path: reports/CoverageReport/SummaryGithub.md
