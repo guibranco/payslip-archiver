@@ -8,20 +8,20 @@
   <ItemGroup Label="Runtime">
     <PackageVersion Include="Dropbox.Api" Version="7.4.0" />
     <PackageVersion Include="MailKit" Version="4.18.1" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.13" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.14" />
     <!-- 6.5+ is AGPL-3.0 (or commercial) and needs PdfSharpLicense.SetAgplLicense() at start-up; this repo is AGPL-3.0 too. -->
     <PackageVersion Include="PDFsharp" Version="6.5.0" />
     <!-- Transitive via MimeKit, which pins 10.0.0; that version has known advisories (GHSA-846f-f764-76mx), so it is lifted explicitly. -->
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
