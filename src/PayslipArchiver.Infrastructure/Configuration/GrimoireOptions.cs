@@ -21,6 +21,7 @@ public sealed class GrimoireOptions
         "Dropbox:AppSecret",
         "Dropbox:RefreshToken",
         "Heartbeat:PingUrl",
+        "LogStream:ApiToken",
     ];
 
     /// <summary>Root URL of the Grimoire API, e.g. <c>https://api.grimoire.straccini.com</c>. Empty disables Grimoire.</summary>

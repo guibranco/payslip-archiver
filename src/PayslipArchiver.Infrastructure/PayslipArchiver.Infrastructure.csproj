@@ -18,6 +18,9 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
     <PackageReference Include="PDFsharp" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Extensions.Logging" />
+    <PackageReference Include="Serilog.Sinks.LogStream" />
     <!-- Lifts MimeKit's vulnerable transitive pin; see Directory.Packages.props. -->
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>

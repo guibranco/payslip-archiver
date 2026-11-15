@@ -118,6 +118,11 @@ something is missing.
 | `Schedule:Interval` | `00:30:00` | Time between cycles (the first runs at start-up). |
 | `Schedule:RunOnce` | `false` | Run one cycle and exit (exit code 1 if anything failed) — for cron / systemd timers. |
 | `Heartbeat:PingUrl` | – | Healthchecks.io ping URL; `/start` and `/fail` are appended automatically. Empty disables it. |
+| `LogStream:Server` | – | [logstream-server](https://github.com/guibranco/logstream-server) base URL (`https://…`; `/api/logs` is appended, a URL already ending in it works too). See [LogStream](#logstream). |
+| `LogStream:ApiKey` / `ApiToken` | – | The client's key and token (`X-Api-Key` / `X-Api-Token`). Shipping starts only when server, key and token are all set. |
+| `LogStream:AppId` | host name | Stored as `app_id`. |
+| `LogStream:MinimumLevel` | `Information` | Lowest level shipped (`Verbose` … `Fatal`); `Logging:LogLevel` still filters first. |
+| `LogStream:Enabled` | `true` | Kill switch: `false` stops all LogStream traffic. |
 
 ### Grimoire
 
@@ -137,6 +142,7 @@ environment:
   | `Dropbox--RefreshToken` | `Dropbox:RefreshToken` |
   | `Dropbox--AppSecret` | `Dropbox:AppSecret` (optional) |
   | `Heartbeat--PingUrl` | `Heartbeat:PingUrl` (optional) |
+  | `LogStream--ApiToken` | `LogStream:ApiToken` (optional) |
 
   A secret missing in Grimoire is skipped, and the usual startup validation reports it if it was required.
   `Grimoire:SecretKeys` replaces the list.
@@ -145,6 +151,27 @@ Values are loaded once; restart the service (`sudo systemctl restart payslip-arc
 change. If Grimoire is unreachable, rejects the key or does not know the environment, the service
 refuses to start, so a deploy rolls back instead of running on partial settings. An environment
 variable on the host still overrides a single Grimoire value.
+
+### LogStream
+
+Besides the console (journald under systemd), every log entry can be shipped to a
+[logstream-server](https://github.com/guibranco/logstream-server) through
+[`Serilog.Sinks.LogStream`](https://www.nuget.org/packages/Serilog.Sinks.LogStream), with the server's
+per-client credentials. In Grimoire, for the `production` environment:
+
+| Grimoire | Name | Value |
+|---|---|---|
+| configuration | `LogStream:Server` | e.g. `https://logs.example.com` |
+| configuration | `LogStream:ApiKey` | the client's key (its app_key) |
+| configuration (optional) | `LogStream:AppId`, `LogStream:MinimumLevel` | default: host name, `Information` |
+| secret | `LogStream--ApiToken` | the client's token |
+
+Restart the service to pick them up; the first log lines say `LogStream shipping is enabled` (or why it is
+not). Entries go out in background batches (up to 100 every 2 s) with the logger name as `category`; a
+slow or unreachable server never blocks a cycle: up to 10,000 entries wait in memory, failing batches are
+retried for 5 minutes and then dropped, and the last batch is flushed when the service stops. Set
+`LogStream:Enabled=false` (in Grimoire, or `LogStream__Enabled=false` in the env file) to switch it off
+without deleting anything.
 
 ### Pay period detection
 
@@ -221,7 +248,7 @@ the binary; the exit code tells the scheduler whether the cycle was clean.
 src/
   PayslipArchiver.Domain          pure model: messages, attachments, pay periods, path template
   PayslipArchiver.Application     the archive use case, message filter, ports (interfaces), options
-  PayslipArchiver.Infrastructure  MailKit (IMAP/POP3), PDFsharp + qpdf, Dropbox + file system, SQLite, Healthchecks.io
+  PayslipArchiver.Infrastructure  MailKit (IMAP/POP3), PDFsharp + qpdf, Dropbox + file system, SQLite, Healthchecks.io, Grimoire, LogStream
   PayslipArchiver.Worker          host: BackgroundService + PeriodicTimer, systemd integration, authorize-dropbox command
 tests/
   PayslipArchiver.Domain.Tests
