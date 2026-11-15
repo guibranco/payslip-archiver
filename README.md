@@ -84,12 +84,16 @@ If the Dropbox desktop client runs on the same machine you can skip all of this 
 
 ## Configuration
 
-Everything is plain `IConfiguration`: `appsettings.json`, user secrets, or environment variables
-with `__` as the separator (`Mailbox__Password`). The service validates required settings at startup
-and refuses to start with a clear message when something is missing.
+Everything is plain `IConfiguration`: `appsettings.json`, user secrets, [Grimoire](#grimoire), or
+environment variables with `__` as the separator (`Mailbox__Password`), in that order of precedence (last
+wins). The service validates required settings at startup and refuses to start with a clear message when
+something is missing.
 
 | Section · key | Default | Notes |
 |---|---|---|
+| `Grimoire:BaseUrl` | – | Grimoire API root (`https://…`; plain `http` only on loopback). Empty disables Grimoire. |
+| `Grimoire:ApiKey` | – | The application's consumer key (`grm_…`). |
+| `Grimoire:Environment` | `production` | Grimoire environment slug. |
 | `Mailbox:Protocol` | `Imap` | `Imap` or `Pop3`. POP3 needs server UIDL support and cannot flag messages, so the ledger does all the de-duplication. |
 | `Mailbox:Host` / `Port` / `UseSsl` | – / `993` / `true` | `UseSsl=false` means STARTTLS, and it is required — the connection is refused rather than downgraded to plaintext. |
 | `Mailbox:Username` / `Password` | – | Use an app password where the provider offers one. |
@@ -114,6 +118,33 @@ and refuses to start with a clear message when something is missing.
 | `Schedule:Interval` | `00:30:00` | Time between cycles (the first runs at start-up). |
 | `Schedule:RunOnce` | `false` | Run one cycle and exit (exit code 1 if anything failed) — for cron / systemd timers. |
 | `Heartbeat:PingUrl` | – | Healthchecks.io ping URL; `/start` and `/fail` are appended automatically. Empty disables it. |
+
+### Grimoire
+
+In production the settings and secrets live in [Grimoire](https://github.com/guibranco/grimoire-api); the
+host only knows the three `Grimoire:*` bootstrap keys. At startup the service reads, for the configured
+environment:
+
+- **every configuration entry** (`GET consumer/configurations`): keys are the colon-separated names from
+  the table above (`Mailbox:Host`, `Filter:FromContains`, …);
+- **these secrets**, by name (`GET consumer/secrets/{name}`): Grimoire cannot list secrets, so the names
+  are fixed, following the Azure Key Vault convention of `--` for `:`.
+
+  | Secret name in Grimoire | Becomes |
+  |---|---|
+  | `Mailbox--Password` | `Mailbox:Password` |
+  | `Pdf--Password` | `Pdf:Password` |
+  | `Dropbox--RefreshToken` | `Dropbox:RefreshToken` |
+  | `Dropbox--AppSecret` | `Dropbox:AppSecret` (optional) |
+  | `Heartbeat--PingUrl` | `Heartbeat:PingUrl` (optional) |
+
+  A secret missing in Grimoire is skipped, and the usual startup validation reports it if it was required.
+  `Grimoire:SecretKeys` replaces the list.
+
+Values are loaded once; restart the service (`sudo systemctl restart payslip-archiver`) to pick up a
+change. If Grimoire is unreachable, rejects the key or does not know the environment, the service
+refuses to start, so a deploy rolls back instead of running on partial settings. An environment
+variable on the host still overrides a single Grimoire value.
 
 ### Pay period detection
 
@@ -154,11 +185,10 @@ installed on the host, and never installs them itself.
 |---|---|---|
 | `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` | yes | how the workflow reaches the host (`SSH_PORT` optional, default 22) |
 | `SSH_KNOWN_HOSTS` | yes | the host's public key(s) in `known_hosts` format — the output of `ssh-keyscan -p PORT HOST` from a trusted machine, checked against the fingerprints `bootstrap.sh` prints. Pinned so a spoofed host can never receive the rendered secrets. |
-| `MAILBOX_HOST`, `MAILBOX_USERNAME`, `MAILBOX_PASSWORD` | yes | `Mailbox:*` (`MAILBOX_PORT`, `MAILBOX_PROTOCOL` optional: 993 / `Imap`) |
-| `FILTER_FROM_CONTAINS`, `FILTER_SUBJECT_CONTAINS` | no | `Filter:*` |
-| `PDF_PASSWORD` | yes | `Pdf:Password` |
-| `DROPBOX_APP_KEY`, `DROPBOX_REFRESH_TOKEN` | yes | `Dropbox:*` (`DROPBOX_ROOT_PATH` optional, default `/`) |
-| `HEARTBEAT_PING_URL` | no | `Heartbeat:PingUrl` |
+| `GRIMOIRE_BASE_URL`, `GRIMOIRE_API_KEY` | yes | `Grimoire:BaseUrl` (`https://api.grimoire.straccini.com`) / `Grimoire:ApiKey` |
+| `GRIMOIRE_ENVIRONMENT` | no | `Grimoire:Environment` (default `production`) |
+
+Everything else (mailbox, filter, PDF password, Dropbox, heartbeat) is kept in [Grimoire](#grimoire).
 
 The workflow renders them into an env file, uploads it with the self-contained build and runs
 `sudo /usr/local/sbin/payslip-archiver-install <release> <env>` ([`deploy/scripts/install.sh`](deploy/scripts/install.sh)),
