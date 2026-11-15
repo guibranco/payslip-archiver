@@ -19,13 +19,25 @@ internal static class GrimoireConfigurationExtensions
             return builder;
         }
 
-        var index = 0;
-        while (index < builder.Sources.Count && builder.Sources[index] is not EnvironmentVariablesConfigurationSource)
+        builder.Sources.Insert(InsertionIndex(builder.Sources), new GrimoireConfigurationSource(options));
+        return builder;
+    }
+
+    /// <summary>
+    /// Before the last un-prefixed environment-variable source, or at the end when there is none. The host
+    /// builder also registers a <c>DOTNET_</c>-prefixed one <em>first</em>, ahead of <c>appsettings.json</c>;
+    /// inserting there would let the empty defaults in <c>appsettings.json</c> override every Grimoire value.
+    /// </summary>
+    internal static int InsertionIndex(IList<IConfigurationSource> sources)
+    {
+        for (var i = sources.Count - 1; i >= 0; i--)
         {
-            index++;
+            if (sources[i] is EnvironmentVariablesConfigurationSource { Prefix: null or "" })
+            {
+                return i;
+            }
         }
 
-        builder.Sources.Insert(index, new GrimoireConfigurationSource(options));
-        return builder;
+        return sources.Count;
     }
 }
