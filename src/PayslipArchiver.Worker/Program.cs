@@ -6,18 +6,23 @@ using PayslipArchiver.Worker;
 // One-off interactive mode: `payslip-archiver authorize-dropbox` prints a refresh token and exits.
 if (args is [var command, ..] && command.Equals("authorize-dropbox", StringComparison.OrdinalIgnoreCase))
 {
-    var configuration = new ConfigurationBuilder()
+    var configurationBuilder = new ConfigurationBuilder()
         .SetBasePath(AppContext.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: true)
         .AddUserSecrets<Program>(optional: true)
         .AddEnvironmentVariables()
-        .AddCommandLine(args[1..])
+        .AddCommandLine(args[1..]);
+    var configuration = configurationBuilder
+        .AddGrimoireIfConfigured(configurationBuilder.Build())
         .Build();
 
     return await DropboxAuthorizer.RunAsync(configuration, Console.Out, Console.In).ConfigureAwait(false);
 }
 
 var builder = Host.CreateApplicationBuilder(args);
+
+// Everything but the Grimoire:* bootstrap keys can live in Grimoire (see README → Grimoire).
+builder.Configuration.AddGrimoireIfConfigured(builder.Configuration);
 
 builder.Services.AddSystemd();
 builder.Services.AddOptions<ScheduleOptions>().Bind(builder.Configuration.GetSection(ScheduleOptions.Section));

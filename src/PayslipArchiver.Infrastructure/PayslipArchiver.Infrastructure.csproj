@@ -12,6 +12,7 @@
   <ItemGroup>
     <PackageReference Include="Dropbox.Api" />
     <PackageReference Include="MailKit" />
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
