@@ -8,9 +8,14 @@ namespace PayslipArchiver.Infrastructure.Pdf;
 
 /// <summary>
 /// Fallback decryptor that runs <c>qpdf --decrypt</c>. qpdf copes with every encryption scheme in the
-/// wild and only needs the user password. The password is passed through a temporary file rather than
-/// the command line so it never shows up in <c>ps</c> or process accounting.
+/// wild and only needs the user password. The password is written to qpdf's standard input
+/// (<c>--password-file=-</c>) rather than the command line, so it never shows up in <c>ps</c> or process
+/// accounting, and never touches the disk either.
 /// </summary>
+/// <remarks>
+/// The temporary files keep a <c>.pdf</c> extension: Ubuntu 26.04 ships an AppArmor profile for qpdf that
+/// only lets it open files with known extensions (<c>.pdf</c>, <c>.json</c>, <c>.qdf</c>) under <c>/tmp</c>.
+/// </remarks>
 public sealed class QpdfDecryptor : IPdfDecryptor
 {
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromSeconds(60);
@@ -31,20 +36,19 @@ public sealed class QpdfDecryptor : IPdfDecryptor
         {
             var inputPath = Path.Combine(workDir.FullName, "in.pdf");
             var outputPath = Path.Combine(workDir.FullName, "out.pdf");
-            var passwordPath = Path.Combine(workDir.FullName, "password");
 
             File.WriteAllBytes(inputPath, encryptedPdf.ToArray());
-            WritePrivate(passwordPath, password);
 
             var startInfo = new ProcessStartInfo(_qpdfPath)
             {
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
                 CreateNoWindow = true,
             };
             startInfo.ArgumentList.Add("--decrypt");
-            startInfo.ArgumentList.Add("--password-file=" + passwordPath);
+            startInfo.ArgumentList.Add("--password-file=-");
             startInfo.ArgumentList.Add(inputPath);
             startInfo.ArgumentList.Add(outputPath);
 
@@ -53,6 +57,11 @@ public sealed class QpdfDecryptor : IPdfDecryptor
 
             var stderr = process.StandardError.ReadToEndAsync();
             var stdout = process.StandardOutput.ReadToEndAsync();
+
+            // qpdf reads the first line of the "file"; closing stdin marks its end.
+            process.StandardInput.Write(password);
+            process.StandardInput.Close();
+
             if (!process.WaitForExit(ProcessTimeout))
             {
                 process.Kill(entireProcessTree: true);
@@ -87,24 +96,5 @@ public sealed class QpdfDecryptor : IPdfDecryptor
                 // Same as above.
             }
         }
-    }
-
-    private static void WritePrivate(string path, string content)
-    {
-        var options = new FileStreamOptions
-        {
-            Mode = FileMode.CreateNew,
-            Access = FileAccess.Write,
-            Share = FileShare.None,
-        };
-
-        if (!OperatingSystem.IsWindows())
-        {
-            options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-        }
-
-        using var stream = new FileStream(path, options);
-        using var writer = new StreamWriter(stream);
-        writer.Write(content);
     }
 }
