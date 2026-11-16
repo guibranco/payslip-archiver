@@ -15,7 +15,7 @@ public static class DependencyInjection
 {
     /// <summary>
     /// Wires every port to an adapter chosen by configuration:
-    /// <c>Mailbox:Protocol</c> (Imap | Pop3), <c>Pdf:Engine</c> (PdfSharp | Qpdf),
+    /// <c>Mailbox:Protocol</c> (Imap | Pop3), <c>Pdf:Engine</c> (Qpdf | PdfSharp),
     /// <c>Archive:Provider</c> (Dropbox | FileSystem) and <c>Heartbeat:PingUrl</c> (set | empty).
     /// </summary>
     public static IServiceCollection AddPayslipArchiverInfrastructure(this IServiceCollection services, IConfiguration configuration)
@@ -51,14 +51,14 @@ public static class DependencyInjection
 
         var engine = configuration.GetValue(
             $"{PdfEngineOptions.Section}:{nameof(PdfEngineOptions.Engine)}",
-            PdfEngine.PdfSharp);
+            PdfEngine.Qpdf);
         switch (engine)
         {
-            case PdfEngine.Qpdf:
-                services.AddSingleton<IPdfDecryptor, QpdfDecryptor>();
+            case PdfEngine.PdfSharp:
+                services.AddSingleton<IPdfDecryptor, PdfSharpDecryptor>();
                 break;
             default:
-                services.AddSingleton<IPdfDecryptor, PdfSharpDecryptor>();
+                services.AddSingleton<IPdfDecryptor, QpdfDecryptor>();
                 break;
         }
 

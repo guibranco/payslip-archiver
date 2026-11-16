@@ -9,7 +9,7 @@
 #   /usr/local/sbin/payslip-archiver-install   root-owned copy of install.sh (what sudoers allows)
 #   /etc/systemd/system/payslip-archiver.service
 #   /etc/sudoers.d/payslip-archiver            lets the deploy user run only that installer
-# plus the service user and directories. Re-run it whenever install.sh or the unit changes in the
+# plus the qpdf package (the default PDF engine), the service user and directories. Re-run it whenever install.sh or the unit changes in the
 # repository (install.sh prints a warning when the copy shipped in a release differs from the one
 # installed here). The deploy user's SSH key is left for you to add.
 set -euo pipefail
@@ -37,6 +37,22 @@ fi
 [[ -f "${INSTALLER_SRC}" ]] || { echo "missing ${INSTALLER_SRC}" >&2; exit 1; }
 [[ -f "${UNIT_SRC}" ]] || { echo "missing systemd unit next to bootstrap.sh" >&2; exit 1; }
 [[ "${DEPLOY_USER}" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "invalid deploy user name '${DEPLOY_USER}'" >&2; exit 1; }
+
+echo "▶ qpdf (default PDF engine)"
+if ! command -v qpdf >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends qpdf
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q qpdf
+  elif command -v yum >/dev/null 2>&1; then
+    yum install -y -q qpdf
+  else
+    echo "qpdf is not installed and no supported package manager was found — install it, or set Pdf__Engine=PdfSharp" >&2
+    exit 1
+  fi
+fi
+qpdf --version | head -n 1 | sed 's/^/    /'
 
 echo "▶ Service user and directories"
 if ! id -u "${SVC_USER}" >/dev/null 2>&1; then

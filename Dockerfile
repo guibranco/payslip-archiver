@@ -31,7 +31,7 @@ LABEL org.opencontainers.image.title="payslip-archiver" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${VERSION}"
 
-# qpdf is only needed when Pdf__Engine=Qpdf; it is small, so it ships by default.
+# qpdf is the default PDF engine (Pdf__Engine=Qpdf).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends qpdf \
     && rm -rf /var/lib/apt/lists/*
