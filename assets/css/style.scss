@@ -1,0 +1,67 @@
+---
+---
+
+@import "{{ site.theme }}";
+
+// Recolour Cayman to match the repo icon (assets/icon.svg: #14B8A6 -> #0F5F6B).
+
+.page-header {
+  background-color: #0F5F6B;
+  background-image: linear-gradient(120deg, #0F5F6B, #14B8A6);
+}
+
+.page-header::before {
+  content: "";
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 1rem;
+  background: url("{{ '/assets/icon.svg' | relative_url }}") center / contain no-repeat;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.25));
+}
+
+.main-content {
+  // The README's H1 is already shown in the page header.
+  > h1:first-child {
+    display: none;
+  }
+
+  a {
+    color: #0F7C85;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    color: #0F5F6B;
+  }
+
+  blockquote {
+    border-left-color: #B7DAD6;
+  }
+
+  table th,
+  table td {
+    border-color: #D6E9E7;
+  }
+}
+
+.site-footer {
+  border-top-color: #D6E9E7;
+}
+
+.site-footer-owner a,
+.site-footer-credits a {
+  color: #0F7C85;
+}
+
+// Mermaid diagrams: centre them and let wide charts scroll on small screens.
+.mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 1.5rem 0;
+  overflow-x: auto;
+}

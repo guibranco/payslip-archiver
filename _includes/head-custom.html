@@ -1,0 +1,33 @@
+<!-- Injected into <head> by the Cayman theme. -->
+<link rel="icon" type="image/svg+xml" href="{{ '/assets/icon.svg' | relative_url }}">
+<link rel="icon" type="image/png" sizes="64x64" href="{{ '/assets/icon-64.png' | relative_url }}">
+<link rel="apple-touch-icon" href="{{ '/assets/icon-256.png' | relative_url }}">
+<meta name="theme-color" content="#0F5F6B">
+
+<!-- Render ```mermaid fenced blocks (GitHub draws them in the README; Jekyll leaves them as code). -->
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+  const blocks = document.querySelectorAll("pre > code.language-mermaid");
+  blocks.forEach((code) => {
+    const container = document.createElement("div");
+    container.className = "mermaid";
+    container.textContent = code.textContent;
+    const highlight = code.closest("div.highlighter-rouge") ?? code.parentElement;
+    highlight.replaceWith(container);
+  });
+
+  if (blocks.length > 0) {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "base",
+      themeVariables: {
+        primaryColor: "#E8F3F2",
+        primaryBorderColor: "#14B8A6",
+        primaryTextColor: "#0F3D44",
+        lineColor: "#0F5F6B",
+      },
+    });
+    await mermaid.run({ querySelector: ".mermaid" });
+  }
+</script>
