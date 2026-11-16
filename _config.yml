@@ -1,0 +1,25 @@
+# GitHub Pages site: http://guilherme.stracini.com.br/payslip-archiver/
+# Built by the classic Pages Jekyll build straight from main; README.md becomes the index page.
+
+title: payslip-archiver
+description: Watches a payroll mailbox, strips the password from payslip PDFs and archives clean copies to Dropbox.
+theme: jekyll-theme-cayman
+
+plugins:
+  - jemoji
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: false
+
+# Keep the .NET sources and build files out of the site build.
+exclude:
+  - src
+  - tests
+  - scripts
+  - Dockerfile
+  - Directory.Build.props
+  - Directory.Packages.props
+  - GitVersion.yml
+  - PayslipArchiver.slnx
