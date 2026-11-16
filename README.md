@@ -105,7 +105,7 @@ something is missing.
 | `Filter:SubjectContains` | – | Case-insensitive substring of the subject. |
 | `Filter:AttachmentPattern` | `*.pdf` | Glob on the attachment name. Only PDFs are ever considered. |
 | `Pdf:Password` | – | **Required.** The provider's password. |
-| `Pdf:Engine` | `PdfSharp` | `PdfSharp` (in-process) or `Qpdf` (shells out to `qpdf`, handles anything). |
+| `Pdf:Engine` | `Qpdf` | `Qpdf` (shells out to `qpdf`, handles anything; `bootstrap.sh` installs it) or `PdfSharp` (in-process, no external tool). |
 | `Naming:PathTemplate` | `/{year}/{period} Payslip.pdf` | Tokens: `{year}` `{month}` `{period}` (`yyyy-MM`) `{original}` `{ext}`. |
 | `Naming:PeriodOffsetMonths` | `0` | Used only when no period can be read from the file name or subject: shifts the e-mail's month (e.g. `-1` when slips arrive early the next month). |
 | `Archive:Provider` | `Dropbox` | `Dropbox` or `FileSystem`. |
@@ -115,7 +115,7 @@ something is missing.
 | `Ledger:Path` | `data/ledger.db` | SQLite file; created on first run. |
 | `Pipeline:MaxMessagesPerCycle` | `50` | Backlog is drained gradually. |
 | `Pipeline:MaxAttempts` | `5` | Retry budget per message. |
-| `Schedule:Interval` | `00:30:00` | Time between cycles (the first runs at start-up). |
+| `Schedule:Interval` | `06:00:00` | Time between cycles (the first runs at start-up). |
 | `Schedule:RunOnce` | `false` | Run one cycle and exit (exit code 1 if anything failed) — for cron / systemd timers. |
 | `Heartbeat:PingUrl` | – | Healthchecks.io ping URL; `/start` and `/fail` are appended automatically. Empty disables it. |
 | `LogStream:Server` | – | [logstream-server](https://github.com/guibranco/logstream-server) base URL (`https://…`; `/api/logs` is appended, a URL already ending in it works too). See [LogStream](#logstream). |
@@ -196,7 +196,7 @@ runs as the unprivileged `payslip` user.
 
 ```bash
 git clone https://github.com/guibranco/payslip-archiver && cd payslip-archiver
-sudo deploy/scripts/bootstrap.sh deploy      # creates users, dirs, /usr/local/sbin/payslip-archiver-install, unit, sudoers
+sudo deploy/scripts/bootstrap.sh deploy      # installs qpdf; creates users, dirs, /usr/local/sbin/payslip-archiver-install, unit, sudoers
 echo "<public key of SSH_PRIVATE_KEY>" | sudo tee -a /home/deploy/.ssh/authorized_keys
 # from your own machine, for the SSH_KNOWN_HOSTS secret (compare with the fingerprints bootstrap.sh printed):
 ssh-keyscan -p 22 <host>
@@ -268,8 +268,8 @@ unencrypted document instead — content and resources come along, the security 
 PDFsharp 6.5+ is dual-licensed (AGPL-3.0 or commercial) and refuses to run until a licence is declared;
 this project declares the AGPL one (`PdfSharpLicense.SetAgplLicense()`), which is why the project itself
 is distributed under the **AGPL-3.0** as well. If you fork it for something you cannot release under the
-AGPL, either buy a PDFsharp licence or switch the engine: `Pdf:Engine=Qpdf` shells out to
-[qpdf](https://qpdf.sourceforge.io/) (Apache-2.0) behind the same `IPdfDecryptor` port.
+AGPL, either buy a PDFsharp licence or drop the PDFsharp engine: the default, `Pdf:Engine=Qpdf`, shells
+out to [qpdf](https://qpdf.sourceforge.io/) (Apache-2.0) behind the same `IPdfDecryptor` port.
 
 ## Development
 
