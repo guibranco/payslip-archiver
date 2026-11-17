@@ -122,6 +122,9 @@ something is missing.
 | `LogStream:ApiKey` / `ApiToken` | – | The client's key and token (`X-Api-Key` / `X-Api-Token`). Shipping starts only when server, key and token are all set. |
 | `LogStream:AppId` | host name | Stored as `app_id`. |
 | `LogStream:MinimumLevel` | `Information` | Lowest level shipped (`Verbose` … `Fatal`); `Logging:LogLevel` still filters first. |
+| `LogStream:Transport` | `Udp` | `Udp`: HMAC-signed, fire-and-forget datagrams (oversized entries go over HTTPS). `Http`: batched POSTs with retries. |
+| `LogStream:UdpHost` | host of `Server` | Host that receives the datagrams. |
+| `LogStream:UdpPort` | `8082` | The server's `UDP_PORT`. |
 | `LogStream:Enabled` | `true` | Kill switch: `false` stops all LogStream traffic. |
 
 ### Grimoire
@@ -164,12 +167,20 @@ per-client credentials. In Grimoire, for the `production` environment:
 | configuration | `LogStream:Server` | e.g. `https://logs.example.com` |
 | configuration | `LogStream:ApiKey` | the client's key (its app_key) |
 | configuration (optional) | `LogStream:AppId`, `LogStream:MinimumLevel` | default: host name, `Information` |
+| configuration (optional) | `LogStream:Transport`, `LogStream:UdpHost`, `LogStream:UdpPort` | default: `Udp`, host of `Server`, `8082` |
 | secret | `LogStream--ApiToken` | the client's token |
 
-Restart the service to pick them up; the first log lines say `LogStream shipping is enabled` (or why it is
-not). Entries go out in background batches (up to 100 every 2 s) with the logger name as `category`; a
-slow or unreachable server never blocks a cycle: up to 10,000 entries wait in memory, failing batches are
-retried for 5 minutes and then dropped, and the last batch is flushed when the service stops. Set
+Restart the service to pick them up; the first log lines say `LogStream shipping is enabled (UDP)` (or why
+it is not). Entries are collected in background batches (up to 100 every 2 s) with the logger name as
+`category`, and by default each one is sent as an **HMAC-signed UDP datagram** to the server's host on
+port `8082`: the token signs every packet and never travels on the wire. UDP is fire-and-forget, so lost or
+rejected packets (clock more than 30 s off, source IP not on the server's allow-list…) are not reported
+here — check `udp.rejected` in the server's `GET /api/health` and keep the host NTP-synced. Entries too
+large for one datagram (typically long stack traces) are posted over HTTPS instead, which is why
+`LogStream:Server` stays required. Set `LogStream:Transport=Http` to go back to batched HTTPS posts.
+
+A slow or unreachable server never blocks a cycle: up to 10,000 entries wait in memory, failing HTTPS
+batches are retried for 5 minutes and then dropped, and the last batch is flushed when the service stops. Set
 `LogStream:Enabled=false` (in Grimoire, or `LogStream__Enabled=false` in the env file) to switch it off
 without deleting anything.
 

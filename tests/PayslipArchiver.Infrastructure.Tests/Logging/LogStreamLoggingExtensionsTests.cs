@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Sockets;
+using System.Text.Json;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,8 +18,49 @@ public sealed partial class LogStreamLoggingExtensionsTests
             .AddInMemoryCollection(values.Select(v => new KeyValuePair<string, string?>($"LogStream:{v.Key}", v.Value)))
             .Build();
 
-    private static IConfiguration Complete(string server = "https://logs.example.com") => Config(
-        ("Server", server), ("ApiKey", "payslip-archiver"), ("ApiToken", "secret-token"), ("AppId", "vinhedo3"));
+    private static IConfiguration Complete(string server = "https://logs.example.com", string transport = "Http") => Config(
+        ("Server", server), ("ApiKey", "payslip-archiver"), ("ApiToken", "secret-token"), ("AppId", "vinhedo3"),
+        ("Transport", transport));
+
+    [Fact]
+    public void DefaultsToUdp_OnTheServersUdpPort()
+    {
+        var options = new LogStreamOptions();
+
+        Assert.Equal(Serilog.Sinks.LogStream.LogStreamTransport.Udp, options.Transport);
+        Assert.Equal(8082, options.UdpPort);
+    }
+
+    [Fact]
+    public async Task ShipsEntries_AsSignedUdpDatagrams_WithoutSendingTheToken()
+    {
+        using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        var port = ((IPEndPoint)listener.Client.LocalEndPoint!).Port;
+        var handler = new RecordingHandler();
+        var configuration = new ConfigurationBuilder()
+            .AddConfiguration(Complete(transport: "Udp"))
+            .AddInMemoryCollection([new("LogStream:UdpHost", "127.0.0.1"), new("LogStream:UdpPort", port.ToString(System.Globalization.CultureInfo.InvariantCulture))])
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging(logging => logging.AddLogStream(configuration, handler));
+
+        await using (var provider = services.BuildServiceProvider())
+        {
+            provider.GetRequiredService<ILogger<LogStreamLoggingExtensionsTests>>().ArchivedPayslips(3);
+        }
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var datagram = await listener.ReceiveAsync(timeout.Token);
+        var text = System.Text.Encoding.UTF8.GetString(datagram.Buffer);
+        using var packet = JsonDocument.Parse(text);
+
+        Assert.Equal("payslip-archiver", packet.RootElement.GetProperty("key").GetString());
+        Assert.False(string.IsNullOrEmpty(packet.RootElement.GetProperty("sig").GetString()));
+        Assert.Contains("Archived 3 payslips", text, StringComparison.Ordinal);
+        Assert.Contains("vinhedo3", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-token", text, StringComparison.Ordinal);
+        Assert.Empty(handler.Requests);
+    }
 
     [Fact]
     public async Task ShipsEntries_WithTheClientCredentials_AndFlushesOnDispose()
