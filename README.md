@@ -123,7 +123,7 @@ something is missing.
 | `LogStream:AppId` | host name | Stored as `app_id`. |
 | `LogStream:MinimumLevel` | `Information` | Lowest level shipped (`Verbose` … `Fatal`); `Logging:LogLevel` still filters first. |
 | `LogStream:Transport` | `Udp` | `Udp`: HMAC-signed, fire-and-forget datagrams (oversized entries go over HTTPS). `Http`: batched POSTs with retries. |
-| `LogStream:UdpHost` | host of `Server` | Host that receives the datagrams. |
+| `LogStream:UdpHost` | `127.0.0.1` | Host that receives the datagrams — LogStream on the same host, bypassing NGINX. |
 | `LogStream:UdpPort` | `8082` | The server's `UDP_PORT`. |
 | `LogStream:Enabled` | `true` | Kill switch: `false` stops all LogStream traffic. |
 
@@ -167,14 +167,15 @@ per-client credentials. In Grimoire, for the `production` environment:
 | configuration | `LogStream:Server` | e.g. `https://logs.example.com` |
 | configuration | `LogStream:ApiKey` | the client's key (its app_key) |
 | configuration (optional) | `LogStream:AppId`, `LogStream:MinimumLevel` | default: host name, `Information` |
-| configuration (optional) | `LogStream:Transport`, `LogStream:UdpHost`, `LogStream:UdpPort` | default: `Udp`, host of `Server`, `8082` |
+| configuration (optional) | `LogStream:Transport`, `LogStream:UdpHost`, `LogStream:UdpPort` | default: `Udp`, `127.0.0.1`, `8082` |
 | secret | `LogStream--ApiToken` | the client's token |
 
 Restart the service to pick them up; the first log lines say `LogStream shipping is enabled (UDP)` (or why
 it is not). Entries are collected in background batches (up to 100 every 2 s) with the logger name as
-`category`, and by default each one is sent as an **HMAC-signed UDP datagram** to the server's host on
-port `8082`: the token signs every packet and never travels on the wire. UDP is fire-and-forget, so lost or
-rejected packets (clock more than 30 s off, source IP not on the server's allow-list…) are not reported
+`category`, and by default each one is sent as an **HMAC-signed UDP datagram** to `127.0.0.1:8082`: the service runs
+on the same host as LogStream, NGINX does not proxy UDP and the port stays closed in the firewall, so the
+packets never leave the machine. The token signs every packet and never travels on the wire. UDP is
+fire-and-forget, so lost or rejected packets (e.g. a clock more than 30 s off) are not reported
 here — check `udp.rejected` in the server's `GET /api/health` and keep the host NTP-synced. Entries too
 large for one datagram (typically long stack traces) are posted over HTTPS instead, which is why
 `LogStream:Server` stays required. Set `LogStream:Transport=Http` to go back to batched HTTPS posts.

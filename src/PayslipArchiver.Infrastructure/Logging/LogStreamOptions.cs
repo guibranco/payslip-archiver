@@ -35,8 +35,11 @@ public sealed class LogStreamOptions
     /// </summary>
     public LogStreamTransport Transport { get; set; } = LogStreamTransport.Udp;
 
-    /// <summary>Host that receives the UDP datagrams. Defaults to the host of <see cref="Server"/>.</summary>
-    public string? UdpHost { get; set; }
+    /// <summary>
+    /// Host that receives the UDP datagrams. Defaults to <c>127.0.0.1</c>: the service runs on the same host
+    /// as LogStream, NGINX does not proxy UDP and the UDP port is not opened in the firewall.
+    /// </summary>
+    public string UdpHost { get; set; } = "127.0.0.1";
 
     /// <summary>The server's <c>UDP_PORT</c>.</summary>
     public int UdpPort { get; set; } = 8082;
