@@ -7,9 +7,9 @@ public sealed class ArchivePathTemplateTests
     private static readonly PayPeriod October = new(2026, 10);
 
     [Fact]
-    public void Default_FilesByYearAndPeriod()
+    public void Default_FilesByYear_AsOriginalNameAndPeriod()
     {
-        Assert.Equal("/2026/2026-10 Payslip.pdf", ArchivePathTemplate.Render(ArchivePathTemplate.Default, October, "whatever.pdf"));
+        Assert.Equal("/2026/whatever - 2026-10.pdf", ArchivePathTemplate.Render(ArchivePathTemplate.Default, October, "whatever.pdf"));
     }
 
     [Theory]

@@ -49,7 +49,7 @@ public sealed class ArchivePayslipsTests
 
         _decryptor.Received(1).Decrypt(Arg.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(Encrypted)), Password);
         await _archive.Received(1).StoreAsync(
-            "/2026/2026-10 Payslip.pdf",
+            "/2026/Payslip_2026-10 - 2026-10.pdf",
             Arg.Is<ReadOnlyMemory<byte>>(m => m.ToArray().SequenceEqual(Decrypted)),
             Arg.Any<CancellationToken>());
 
@@ -59,7 +59,7 @@ public sealed class ArchivePayslipsTests
                 message,
                 Arg.Is<IReadOnlyList<ArchivedDocument>>(docs =>
                     docs.Count == 1
-                    && docs[0].Path == "/2026/2026-10 Payslip.pdf"
+                    && docs[0].Path == "/2026/Payslip_2026-10 - 2026-10.pdf"
                     && docs[0].Sha256 == ContentFingerprint.Sha256Hex(Decrypted)
                     && docs[0].Period == new PayPeriod(2026, 10)
                     && docs[0].SourceFileName == "Payslip_2026-10.pdf"),
@@ -75,13 +75,13 @@ public sealed class ArchivePayslipsTests
     {
         ListAndFetch(Message("imap:1:1", "Payslip_2026-10.pdf"));
         _archive.StoreAsync(Arg.Any<string>(), Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>())
-            .Returns("/2026/2026-10 Payslip (1).pdf");
+            .Returns("/2026/Payslip_2026-10 - 2026-10 (1).pdf");
 
         await Sut().RunAsync(CancellationToken.None);
 
         await _ledger.Received(1).RecordArchivedAsync(
             Arg.Any<IncomingMessage>(),
-            Arg.Is<IReadOnlyList<ArchivedDocument>>(docs => docs[0].Path == "/2026/2026-10 Payslip (1).pdf"),
+            Arg.Is<IReadOnlyList<ArchivedDocument>>(docs => docs[0].Path == "/2026/Payslip_2026-10 - 2026-10 (1).pdf"),
             Arg.Any<CancellationToken>());
     }
 
@@ -206,8 +206,8 @@ public sealed class ArchivePayslipsTests
 
         Assert.Equal(2, report.Documents);
         Assert.Equal(1, report.Archived);
-        await _archive.Received(1).StoreAsync("/2026/2026-09 Payslip.pdf", Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
-        await _archive.Received(1).StoreAsync("/2026/2026-10 Payslip.pdf", Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+        await _archive.Received(1).StoreAsync("/2026/Payslip_2026-09 - 2026-09.pdf", Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
+        await _archive.Received(1).StoreAsync("/2026/Payslip_2026-10 - 2026-10.pdf", Arg.Any<ReadOnlyMemory<byte>>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
