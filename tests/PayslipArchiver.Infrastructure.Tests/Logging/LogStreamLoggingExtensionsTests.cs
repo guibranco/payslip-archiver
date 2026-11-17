@@ -23,11 +23,12 @@ public sealed partial class LogStreamLoggingExtensionsTests
         ("Transport", transport));
 
     [Fact]
-    public void DefaultsToUdp_OnTheServersUdpPort()
+    public void DefaultsToUdp_OnLocalhost()
     {
         var options = new LogStreamOptions();
 
         Assert.Equal(Serilog.Sinks.LogStream.LogStreamTransport.Udp, options.Transport);
+        Assert.Equal("127.0.0.1", options.UdpHost);
         Assert.Equal(8082, options.UdpPort);
     }
 
@@ -39,7 +40,7 @@ public sealed partial class LogStreamLoggingExtensionsTests
         var handler = new RecordingHandler();
         var configuration = new ConfigurationBuilder()
             .AddConfiguration(Complete(transport: "Udp"))
-            .AddInMemoryCollection([new("LogStream:UdpHost", "127.0.0.1"), new("LogStream:UdpPort", port.ToString(System.Globalization.CultureInfo.InvariantCulture))])
+            .AddInMemoryCollection([new("LogStream:UdpPort", port.ToString(System.Globalization.CultureInfo.InvariantCulture))])
             .Build();
         var services = new ServiceCollection();
         services.AddLogging(logging => logging.AddLogStream(configuration, handler));
