@@ -20,7 +20,7 @@ namespace PayslipArchiver.Domain.Archiving;
 /// </remarks>
 public static partial class ArchivePathTemplate
 {
-    public const string Default = "/{year}/{period} Payslip.pdf";
+    public const string Default = "/{year}/{original} - {period}.pdf";
 
     public static string Render(string template, PayPeriod period, string originalFileName)
     {
