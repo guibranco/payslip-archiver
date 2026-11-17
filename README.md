@@ -10,7 +10,7 @@ Watches a payroll mailbox, strips the password from payslip PDFs and archives cl
 Payroll providers e-mail payslips as password-protected PDFs, always with the same password. That is
 fine for transit and useless for an archive: every time you need a slip you are typing the password again.
 This small .NET service polls a dedicated IMAP (or POP3) mailbox, picks out the payslip e-mails, removes
-the password from each PDF and files the result under `/<year>/<yyyy-MM> Payslip.pdf` in Dropbox — or in
+the password from each PDF and files the result under `/<year>/<original name> - <yyyy-MM>.pdf` in Dropbox — or in
 any local folder you point it at.
 
 ## How it works
@@ -106,7 +106,7 @@ something is missing.
 | `Filter:AttachmentPattern` | `*.pdf` | Glob on the attachment name. Only PDFs are ever considered. |
 | `Pdf:Password` | – | **Required.** The provider's password. |
 | `Pdf:Engine` | `Qpdf` | `Qpdf` (shells out to `qpdf`, handles anything; `bootstrap.sh` installs it) or `PdfSharp` (in-process, no external tool). |
-| `Naming:PathTemplate` | `/{year}/{period} Payslip.pdf` | Tokens: `{year}` `{month}` `{period}` (`yyyy-MM`) `{original}` `{ext}`. |
+| `Naming:PathTemplate` | `/{year}/{original} - {period}.pdf` | Tokens: `{year}` `{month}` `{period}` (`yyyy-MM`) `{original}` `{ext}`. |
 | `Naming:PeriodOffsetMonths` | `0` | Used only when no period can be read from the file name or subject: shifts the e-mail's month (e.g. `-1` when slips arrive early the next month). |
 | `Archive:Provider` | `Dropbox` | `Dropbox` or `FileSystem`. |
 | `Archive:Directory` | `archive` | Root folder for `FileSystem`. |
