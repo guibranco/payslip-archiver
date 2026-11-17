@@ -8,7 +8,7 @@ internal static partial class StartupLog
     public static void LogStreamState(ILogger logger, IConfiguration configuration)
     {
         var options = configuration.GetSection(LogStreamOptions.Section).Get<LogStreamOptions>() ?? new LogStreamOptions();
-        var state = options.IsConfigured ? "enabled"
+        var state = options.IsConfigured ? $"enabled ({options.Transport.ToString().ToUpperInvariant()})"
             : !options.Enabled ? "disabled (LogStream:Enabled=false)"
             : "not configured (LogStream:Server, ApiKey and ApiToken are all needed)";
         LogLogStreamState(logger, state);

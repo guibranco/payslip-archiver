@@ -11,11 +11,13 @@ public static class LogStreamLoggingExtensions
 {
     /// <summary>
     /// When the <c>LogStream</c> section is complete, adds a logging provider that ships every log entry to
-    /// LogStream in background batches, next to the existing console provider. Otherwise does nothing.
+    /// LogStream in background batches (over UDP by default), next to the existing console provider.
+    /// Otherwise does nothing.
     /// </summary>
     /// <remarks>
-    /// A slow or unreachable server never blocks the archive cycle: up to 10,000 entries wait in memory,
-    /// failing batches are retried for 5 minutes and then dropped. Disposing the host flushes what is left.
+    /// A slow or unreachable server never blocks the archive cycle: up to 10,000 entries wait in memory.
+    /// Over UDP delivery is fire-and-forget; over HTTP (and the UDP fallback for oversized entries) failing
+    /// batches are retried for 5 minutes and then dropped. Disposing the host flushes what is left.
     /// </remarks>
     public static ILoggingBuilder AddLogStream(this ILoggingBuilder logging, IConfiguration configuration) =>
         logging.AddLogStream(configuration, messageHandler: null);
@@ -43,6 +45,12 @@ public static class LogStreamLoggingExtensions
                     sink.AppId = string.IsNullOrWhiteSpace(options.AppId) ? Environment.MachineName : options.AppId.Trim();
                     sink.RequestTimeout = TimeSpan.FromSeconds(10);
                     sink.MessageHandler = messageHandler;
+                    sink.Transport = options.Transport;
+                    sink.UdpPort = options.UdpPort;
+                    if (!string.IsNullOrWhiteSpace(options.UdpHost))
+                    {
+                        sink.UdpHost = options.UdpHost.Trim();
+                    }
                 },
                 batching =>
                 {

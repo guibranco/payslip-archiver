@@ -1,11 +1,13 @@
 using Serilog.Events;
+using Serilog.Sinks.LogStream;
 
 namespace PayslipArchiver.Infrastructure.Logging;
 
 /// <summary>
 /// Bound from the <c>LogStream</c> section: ships logs to a
 /// <see href="https://github.com/guibranco/logstream-server">logstream-server</see> with the per-client
-/// credentials (<c>X-Api-Key</c> + <c>X-Api-Token</c>). Console / journald logging is unaffected.
+/// credentials (<c>X-Api-Key</c> + <c>X-Api-Token</c>), as HMAC-signed UDP datagrams by default.
+/// Console / journald logging is unaffected.
 /// </summary>
 public sealed class LogStreamOptions
 {
@@ -25,6 +27,19 @@ public sealed class LogStreamOptions
 
     /// <summary>Instance identifier stored as <c>app_id</c>. Defaults to the host name.</summary>
     public string? AppId { get; set; }
+
+    /// <summary>
+    /// <c>Udp</c> (default): one HMAC-signed, fire-and-forget datagram per entry; the token signs each packet
+    /// and never travels. Entries too large for one datagram are posted over HTTPS instead.
+    /// <c>Http</c>: batches posted to <c>/api/logs</c> with retries.
+    /// </summary>
+    public LogStreamTransport Transport { get; set; } = LogStreamTransport.Udp;
+
+    /// <summary>Host that receives the UDP datagrams. Defaults to the host of <see cref="Server"/>.</summary>
+    public string? UdpHost { get; set; }
+
+    /// <summary>The server's <c>UDP_PORT</c>.</summary>
+    public int UdpPort { get; set; } = 8082;
 
     /// <summary>Lowest level shipped. <c>Logging:LogLevel</c> still filters first.</summary>
     public LogEventLevel MinimumLevel { get; set; } = LogEventLevel.Information;
