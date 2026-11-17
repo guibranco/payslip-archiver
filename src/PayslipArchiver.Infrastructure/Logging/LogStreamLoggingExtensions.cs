@@ -47,10 +47,7 @@ public static class LogStreamLoggingExtensions
                     sink.MessageHandler = messageHandler;
                     sink.Transport = options.Transport;
                     sink.UdpPort = options.UdpPort;
-                    if (!string.IsNullOrWhiteSpace(options.UdpHost))
-                    {
-                        sink.UdpHost = options.UdpHost.Trim();
-                    }
+                    sink.UdpHost = string.IsNullOrWhiteSpace(options.UdpHost) ? "127.0.0.1" : options.UdpHost.Trim();
                 },
                 batching =>
                 {
