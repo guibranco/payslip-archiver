@@ -272,7 +272,7 @@ jobs:
           makeLatest: true
           commit: ${{ github.sha }}
           tag: v${{ needs.build.outputs.version }}
-          name: v${{ needs.build.outputs.version }}
+          name: Release v${{ needs.build.outputs.version }}
           generateReleaseNotes: true
           artifacts: dist/*
           body: |
